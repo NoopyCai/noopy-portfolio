@@ -1,0 +1,28 @@
+:root {
+  --green: #06ff31;
+  --bg: #1f241f;
+  --emu-green: #6eb43f;
+  --seat: #a6c4d8;
+  --seat-pri: #e7a9bc;
+  --amber: #f2c230;
+  --text: #e9eff8;
+  --muted: #8b98ad;
+  --line: rgba(255, 255, 255, 0.08);
+  --font-led: "Departure Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --font-zh: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
+}
+@font-face {
+  font-family: "Departure Mono";
+  src: url(/fonts/DepartureMono-Regular.woff2) format("woff2");
+  font-display: swap;
+}
+* { box-sizing: border-box; }
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-zh);
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--green); }
