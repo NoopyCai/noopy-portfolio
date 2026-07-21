@@ -1,0 +1,142 @@
+<!-- @dsCard group="場景 Scenery" -->
+<title>車窗風景畫廊 — Window Scenery（每站一景）</title>
+<style>
+  :root{--green:#06ff31;--mono:ui-monospace,"SF Mono","JetBrains Mono","Roboto Mono",Menlo,monospace}
+  *{box-sizing:border-box}
+  body{margin:0;background:#0a0d0a;color:#cdd6cf;font-family:var(--mono);padding:22px}
+  h1{font-size:15px;letter-spacing:.14em;color:var(--green);margin:0 0 4px}
+  p.sub{color:#77857a;font-size:12px;margin:0 0 20px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:20px}
+  .card{background:#111713;border:1px solid #212a24;border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:10px}
+  .win{position:relative;aspect-ratio:16/10;border-radius:14px;overflow:hidden;border:3px solid #38485c;
+    box-shadow:inset 0 0 42px rgba(0,0,0,.75)}
+  .win canvas{width:100%;height:100%;display:block;image-rendering:pixelated}
+  .win .glass{position:absolute;inset:0;pointer-events:none;
+    background:linear-gradient(115deg,rgba(255,255,255,.08),transparent 22%,transparent 80%,rgba(255,255,255,.05))}
+  .meta{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+  .no{color:#f2c230;font-size:12px;letter-spacing:.14em}
+  .zh{color:#eafff0;font-size:15px}
+  .en{color:#77857a;font-size:11px;letter-spacing:.16em}
+  .led{font-family:var(--mono);font-size:11px;letter-spacing:.1em;color:var(--green);
+    background:#080a08;border:1px solid #182018;border-radius:5px;padding:5px 8px;text-shadow:0 0 5px rgba(6,255,49,.7);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+</style>
+<h1>車窗風景畫廊 Window Scenery</h1>
+<p class="sub">旅程每一站,車窗外一種風景（靜態預覽・finer 像素・夜/黃昏色調）。滑到底看完六站。</p>
+<div class="grid" id="grid"></div>
+
+<script>
+  const STATIONS=[
+    {no:'月台 PLATFORM',zh:'月台・出發',en:'DEPARTURE',led:'本次列車即將出發 · DOORS CLOSING',fn:'platform'},
+    {no:'STATION 01',zh:'電商推薦系統',en:'RECOMMENDATION',led:'下一站 電商推薦系統 · NEXT: RECOMMENDER',fn:'city'},
+    {no:'STATION 02',zh:'LINE LIFF 會員綁定',en:'LINE × MAGENTO',led:'下一站 會員綁定 · NEXT: LINE LIFF',fn:'river'},
+    {no:'STATION 03',zh:'AI 工具整合',en:'AI AUTOMATION',led:'下一站 AI 工具 · 台北 · 信義 · NEXT: AI TOOLS',fn:'taipei'},
+    {no:'車廂 SKILLS',zh:'技能車廂',en:'TECH STACK',led:'技能車廂 · FRONTEND / BACKEND / DATA / AI',fn:'field'},
+    {no:'TERMINAL',zh:'終點站・南迴海景',en:'ARRIVAL',led:'終點站 到了 · THIS SERVICE TERMINATES',fn:'sea'},
+  ];
+  const bay=[[0,8,2,10],[12,4,14,6],[3,11,1,9],[15,7,13,5]];
+
+  function makeScene(canvas,type){
+    const K=2,W=208,H=130,DW=W*K,DH=H*K;
+    canvas.width=DW;canvas.height=DH;const g=canvas.getContext('2d');g.imageSmoothingEnabled=false;
+    const dith=(dx,dy,t)=>(bay[dy&3][dx&3]/16)<t;
+    const PX=(dx,dy,c)=>{g.fillStyle=c;g.fillRect(dx,dy,1,1);};
+    const R=(x,y,w,h,c)=>{g.fillStyle=c;g.fillRect(Math.round(x*K),Math.round(y*K),Math.max(1,Math.round(w*K)),Math.max(1,Math.round(h*K)));};
+    const rnd=(s=>()=>((s=(s*1103515245+12345)&0x7fffffff)/0x7fffffff))(type.length*97+7);
+    function grad(y0,y1,stops){for(let dy=y0*K;dy<y1*K;dy++){const f=(dy/K-y0)/(y1-y0);
+      let i=0;while(i<stops.length-1&&f>stops[i+1][0])i++;const j=Math.min(i+1,stops.length-1);
+      const a=stops[i][1],b=stops[j][1],seg=(f-stops[i][0])/((stops[j][0]-stops[i][0])||1);
+      for(let dx=0;dx<DW;dx++)PX(dx,dy,dith(dx,dy,seg)?b:a);}}
+    function disc(cx,cy,r,c,glow){for(let dy=(cy-r-glow)*K;dy<(cy+r+glow)*K;dy++)for(let dx=(cx-r-glow)*K;dx<(cx+r+glow)*K;dx++){
+      const d=Math.hypot(dx/K-cx,dy/K-cy);if(d<r)PX(dx,dy,c);else if(d<r+glow&&dith(dx,dy,1-(d-r)/glow))PX(dx,dy,c);}}
+
+    if(type==='city'){
+      grad(0,H,[[0,'#b2380c'],[.4,'#ea8330'],[.62,'#f2ac57'],[.66,'#141810'],[1,'#0a0d0a']]);
+      let x=0;while(x<W){const w=4+(rnd()*16|0),h=10+(rnd()*46|0);R(x,86-h*0.01,0,0);
+        R(x,86-h,w,h,'#0b0f0b');for(let ly=88-h;ly<86;ly+=3)for(let lx=x+1;lx<x+w-1;lx+=3)if(rnd()>.5)R(lx,ly,1,1,'#ffb24d');x+=w+2+(rnd()*5|0);}
+      R(0,86,W,H,'#0a0d0a');
+    }
+    else if(type==='platform'){
+      grad(0,64,[[0,'#141d33'],[1,'#241a14']]);
+      R(0,64,W,H,'#0c110e');                                   // platform hall
+      for(let i=0;i<5;i++){const px=12+i*46;R(px,20,7,50,'#0a0f0c');R(px,18,7,2,'#fff2cf');   // pillars + ceiling lamp
+        for(let dy=20*K;dy<40*K;dy++)for(let dx=(px-3)*K;dx<(px+10)*K;dx++){const t=(1-Math.abs(dx/K-(px+3.5))/7)*(1-(dy/K-20)/20)*0.5;if(t>.05&&dith(dx,dy,t))PX(dx,dy,'rgba(255,238,195,0.3)');}}
+      R(0,96,W,4,'#f2c230');for(let x=0;x<W;x+=8)R(x,96,4,4,'#c99a1a');   // tactile safety line
+      R(0,100,W,H,'#11161a');                                   // platform floor
+      for(let dy=100*K;dy<DH;dy++)for(let dx=0;dx<DW;dx++){const t=(1-(dy/K-100)/30)*0.35;if(dith(dx,dy,t))PX(dx,dy,'rgba(255,220,150,0.10)');}
+      R(70,30,68,22,'#06110a');R(72,32,64,18,'#0a1f10');        // station name board
+      for(let x=78;x<130;x+=4)R(x,38,2,6,'#06ff31');            // faux green station text
+    }
+    else if(type==='river'){
+      grad(0,84,[[0,'#0a1730'],[.55,'#12294a'],[.8,'#1c3a5e'],[1,'#12233b']]);
+      disc(150,26,9,'#e9edd6',6);                               // moon + halo
+      R(0,60,W,4,'#0c1a2c');                                    // far bank
+      for(let i=0;i<4;i++)R(20+i*46,52,3,10,'#0d1f33');         // bridge pylons
+      R(0,58,W,2,'#33506e');for(let x=0;x<W;x+=6)R(x,55,1,4,'#5a7ea0'); // bridge deck+cables
+      for(let x=8;x<W;x+=14)R(x,54,2,2,'#ffd27a');              // bridge lights
+      R(0,84,W,H,'#0a1626');                                    // water
+      const cols=[30,150,70,110,180];                            // reflected light columns
+      cols.forEach(cx=>{for(let dy=84*K;dy<DH;dy++){const t=(1-(dy/K-84)/44)*0.55;for(let dx=(cx-2)*K;dx<(cx+2)*K;dx++)if(dith(dx,dy+(cx*7),t))PX(dx,dy,'rgba(255,210,120,0.5)');}});
+    }
+    else if(type==='taipei'){
+      grad(0,62,[[0,'#4f9fe0'],[.55,'#93c6ec'],[.9,'#d4e9f6'],[1,'#eaf4fb']]);          // daytime sky
+      disc(24,18,6,'#fff6d8',9);                                                          // sun
+      const cloud=(cx,cy)=>[[0,0,10,3],[3,-2,6,2],[-3,1,5,2]].forEach(([ox,oy,w,h])=>R(cx+ox,cy+oy,w,h,'#f4f9fd'));
+      cloud(60,13);cloud(158,22);
+      for(let x=0;x<W;x++){const h=(50+Math.sin(x*0.05)*6+Math.sin(x*0.14)*3)|0;for(let dy=h*K;dy<64*K;dy++){PX(x*K,dy,'#5f8a72');PX(x*K+1,dy,'#5f8a72');}}   // 象山/mountains
+      // dense city buildings
+      function bldg(x,w,top,c){R(x,top,w,106-top,c);R(x,top,w,1,'rgba(255,255,255,0.28)');
+        for(let wy=top+3;wy<104;wy+=4)for(let wx=x+2;wx<x+w-1;wx+=3)if((wx+wy)%5<3)R(wx,wy,1,2,'rgba(255,255,255,0.34)');}
+      bldg(2,16,74,'#8a94a0');bldg(20,14,66,'#9aa2ad');bldg(36,18,80,'#7f8893');
+      bldg(56,15,72,'#93a0ac');bldg(73,18,82,'#88919d');bldg(94,13,76,'#9ba6b2');
+      bldg(150,20,70,'#8a94a0');bldg(172,15,78,'#95a0ac');bldg(189,17,72,'#828c98');
+      // ---- Taipei 101 ----
+      const tx=128;
+      R(tx-1,14,2,12,'#9fb8b2');R(tx,10,1,4,'#c8d8d4');                                   // spire
+      R(tx-6,26,12,4,'#7fa199');                                                          // cap
+      for(let s=0;s<8;s++){const y=30+s*8;R(tx-8,y,16,8,'#6f9e94');R(tx-9,y,18,2,'#8fbcb1');R(tx-8,y+7,16,1,'#4d7168');}  // 8 flared segments
+      R(tx-13,94,26,12,'#5c7f77');R(tx-13,94,26,1,'#7fa199');                             // podium
+      for(let dy=32*K;dy<93*K;dy+=2)for(let dx=(tx-6)*K;dx<(tx+6)*K;dx+=3)if((dx+dy)%4<2)PX(dx,dy,'rgba(232,246,243,0.25)');  // windows
+      // ---- Chinese signboards 招牌林立 ----
+      const S=['#d64b3f','#e0a53f','#2f8f4f','#3f6fd6','#c23f8f','#e8542f'];
+      const hsign=(x,y,w,c)=>{R(x,y,w,7,c);R(x,y,w,1,'rgba(255,255,255,0.5)');for(let cx2=x+1;cx2<x+w-1;cx2+=4)R(cx2,y+2,3,3,'rgba(255,255,255,0.92)');};
+      const vsign=(x,y,h,c)=>{R(x,y,4,h,c);R(x,y,4,1,'rgba(255,255,255,0.5)');for(let cy2=y+1;cy2<y+h-1;cy2+=4)R(x+1,cy2,2,3,'rgba(255,255,255,0.92)');};
+      hsign(3,86,14,S[0]);hsign(22,80,11,S[1]);hsign(38,92,16,S[2]);hsign(57,84,13,S[3]);
+      hsign(74,94,16,S[4]);hsign(151,84,17,S[5]);hsign(190,88,15,S[0]);
+      vsign(17,80,22,S[1]);vsign(70,84,24,S[2]);vsign(147,74,30,S[3]);vsign(187,78,22,S[5]);
+      // ---- street level ----
+      R(0,104,W,H,'#3a3f45');R(0,104,W,2,'#4a4f55');
+      for(let x=0;x<W;x+=14)R(x,113,7,2,'#d8d2b8');
+      R(20,110,20,7,'#d64b3f');R(22,107,15,4,'#d64b3f');R(24,108,10,2,'#bfe6f4');          // red bus
+      R(120,111,16,6,'#eef2f5');R(122,108,11,4,'#eef2f5');R(123,109,8,2,'#bfe6f4');         // white car
+    }
+    else if(type==='field'){
+      grad(0,80,[[0,'#c2531a'],[.4,'#ea8330'],[.6,'#f2c07a'],[.66,'#3a4a2c'],[1,'#1a2416']]);
+      // distant mountains
+      for(let x=0;x<W;x++){const m=54+Math.sin(x*0.05)*6+Math.sin(x*0.13)*4;for(let dy=(m|0)*K;dy<80*K;dy++)PX(x*K,dy,'#243018'),PX(x*K+1,dy,'#243018');}
+      R(0,80,W,H,'#16210f');                                     // paddy field
+      for(let ry=84;ry<H;ry+=6){for(let dx=0;dx<DW;dx++){const t=(1-(ry-84)/46)*0.4;if(dith(dx,ry*K,t))PX(dx,ry*K,'rgba(242,170,90,0.4)');}}  // sky reflection in water
+      for(let i=0;i<6;i++)R(16+i*32+(rnd()*10|0),56+(rnd()*4|0),1,1,'#ffd27a');  // scattered farm lights
+      R(150,48,10,8,'#0e160a');R(151,45,8,3,'#0e160a');          // little farmhouse
+    }
+    else if(type==='sea'){
+      grad(0,74,[[0,'#182a4a'],[.34,'#b8492a'],[.5,'#f2a25a'],[.6,'#f6c98a'],[1,'#0d2438']]);
+      disc(70,52,8,'#ffe9c2',7);                                 // low sun
+      R(0,74,W,H,'#0a1c2c');                                     // sea
+      for(let wy=76;wy<H;wy+=5){for(let dx=0;dx<DW;dx++){const t=(1-(wy-76)/48)*0.3;if(dith(dx,wy*K,t))PX(dx,wy*K,'rgba(120,170,210,0.35)');}}
+      for(let dy=74*K;dy<DH;dy++){const t=(1-(dy/K-74)/50)*0.7;for(let dx=64*K;dx<76*K;dx++)if(dith(dx,dy,t))PX(dx,dy,'rgba(255,215,140,0.55)');}  // sun reflection column
+      R(120,70,10,4,'#0c1a12');R(124,66,1,5,'#0c1a12');          // distant boat
+      for(let x=150;x<200;x++){const c=64-((x-150)*0.2)|0;R(x,c,1,72-c,'#0a1a10');} // headland silhouette
+    }
+  }
+
+  const grid=document.getElementById('grid');
+  STATIONS.forEach(s=>{
+    const card=document.createElement('div');card.className='card';
+    card.innerHTML=`<div class="win"><canvas></canvas><div class="glass"></div></div>
+      <div class="meta"><span class="no">${s.no}</span><span class="zh">${s.zh}</span><span class="en">${s.en}</span></div>
+      <div class="led">◄ ${s.led} ►</div>`;
+    grid.appendChild(card);
+    makeScene(card.querySelector('canvas'),s.fn);
+  });
+</script>

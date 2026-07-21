@@ -1,0 +1,33 @@
+<!-- @dsCard group="品牌 Brand" -->
+<title>站徽 — 夜車・區間 NIGHT LOCAL（原創）</title>
+<style>
+  :root{--green:#06ff31;--mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,monospace}
+  body{margin:0;font-family:var(--mono);min-height:100vh;display:grid;grid-template-columns:1fr 1fr}
+  .side{display:flex;flex-direction:column;gap:16px;align-items:center;justify-content:center;padding:30px}
+  .dark{background:#1f241f}.light{background:#eef1f0}
+  .dark .cap{color:#7f8f81}.light .cap{color:#5a6b60}
+  .cap{font-size:11px;letter-spacing:.2em}
+  svg{width:190px;height:190px}
+  .ring{fill:none;stroke-width:6}
+  .dark .ring{stroke:var(--green)}.light .ring{stroke:#0b4da2}
+  .ibeam{stroke-width:14;stroke-linecap:round}
+  .dark .ibeam{stroke:var(--green)}.light .ibeam{stroke:#0b4da2}
+  .dark .word{fill:var(--green)}.light .word{fill:#0b4da2}
+</style>
+<div class="side dark">
+  <svg viewBox="0 0 200 200">
+    <circle class="ring" cx="100" cy="100" r="82"/>
+    <!-- 工字軌意象(原創):上下橫 + 中直,像 I-beam / 鐵軌剖面 -->
+    <path class="ibeam" d="M64 66 H136 M100 66 V134 M64 134 H136"/>
+    <text class="word" x="100" y="180" text-anchor="middle" style="font-size:15px;letter-spacing:5px;font-weight:700">夜車・區間</text>
+  </svg>
+  <div class="cap">深色版 · NIGHT LOCAL</div>
+</div>
+<div class="side light">
+  <svg viewBox="0 0 200 200">
+    <circle class="ring" cx="100" cy="100" r="82"/>
+    <path class="ibeam" d="M64 66 H136 M100 66 V134 M64 134 H136"/>
+    <text class="word" x="100" y="180" text-anchor="middle" style="font-size:14px;letter-spacing:3px;font-weight:700">NIGHT LOCAL</text>
+  </svg>
+  <div class="cap">淺色版 · 原創站徽,非台鐵官方</div>
+</div>

@@ -1,0 +1,44 @@
+<!-- @dsCard group="元件 Elements" -->
+<title>車廂元件庫 — 吊環 / 立柱 / 座椅 / 博愛座</title>
+<style>
+  :root{--green:#06ff31;--metal:#b7bfc0;--metald:#8f9799;--seat:#a6c4d8;--seatd:#7fa6c0;
+    --seatp:#e7a9bc;--seatpd:#d585a0;--yellow:#f2c230;--blue:#0b4da2;
+    --mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,monospace}
+  body{margin:0;background:#12160f;color:#cdd6cf;font-family:var(--mono)}
+  h1{font-size:14px;letter-spacing:.14em;color:var(--green);padding:16px 18px 4px;margin:0}
+  p.sub{color:#77857a;font-size:12px;padding:0 18px 12px;margin:0}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:14px;padding:0 18px 24px}
+  .cell{background:#1b2019;border:1px solid #283025;border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:8px;align-items:center}
+  .cell svg{width:100%;height:120px}
+  .cell .lab{font-size:11px;letter-spacing:.08em;color:#9fb0a2;text-align:center}
+  .cell .lab b{color:#eafff0;display:block;font-size:12px}
+  .draw{fill:none;stroke:var(--metald);stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+</style>
+<h1>車廂元件庫 Elements</h1>
+<p class="sub">可獨立取用的向量元件（皆為原創,對照 EMU900 繪製）</p>
+<div class="grid">
+  <div class="cell">
+    <svg viewBox="0 0 120 120"><line x1="60" y1="14" x2="60" y2="60" stroke="var(--metald)" stroke-width="4"/><circle cx="60" cy="80" r="20" fill="none" stroke="var(--metald)" stroke-width="6"/></svg>
+    <div class="lab"><b>吊環 Strap</b>一般（灰）</div>
+  </div>
+  <div class="cell">
+    <svg viewBox="0 0 120 120"><line x1="60" y1="14" x2="60" y2="60" stroke="var(--yellow)" stroke-width="4"/><circle cx="60" cy="80" r="20" fill="none" stroke="var(--yellow)" stroke-width="6"/></svg>
+    <div class="lab"><b>博愛拉環 Strap</b>優先座（黃）</div>
+  </div>
+  <div class="cell">
+    <svg viewBox="0 0 120 120"><path class="draw" d="M60 108 V40 M60 40 l-16 -18 M60 40 l16 -18 M60 40 v-22"/></svg>
+    <div class="lab"><b>三叉立柱 Pole</b>EMU900 特徵</div>
+  </div>
+  <div class="cell">
+    <svg viewBox="0 0 160 120"><rect x="18" y="26" width="124" height="34" rx="8" fill="var(--seat)" stroke="var(--seatd)" stroke-width="2"/><rect x="18" y="60" width="124" height="42" rx="10" fill="var(--seat)" stroke="var(--seatd)" stroke-width="2"/><line x1="80" y1="30" x2="80" y2="98" stroke="var(--seatd)" stroke-width="1.5"/></svg>
+    <div class="lab"><b>座椅 Seat</b>粉藍 一般座</div>
+  </div>
+  <div class="cell">
+    <svg viewBox="0 0 160 120"><rect x="18" y="26" width="124" height="34" rx="8" fill="var(--seatp)" stroke="var(--seatpd)" stroke-width="2"/><rect x="18" y="60" width="124" height="42" rx="10" fill="var(--seatp)" stroke="var(--seatpd)" stroke-width="2"/></svg>
+    <div class="lab"><b>博愛座 Seat</b>粉紅 優先座</div>
+  </div>
+  <div class="cell">
+    <svg viewBox="0 0 120 120"><rect x="20" y="86" width="80" height="24" fill="var(--yellow)"/><circle cx="60" cy="40" r="24" fill="var(--blue)"/><circle cx="60" cy="30" r="7" fill="#fff"/><path d="M46 62 q14 -18 28 0 z" fill="#fff"/></svg>
+    <div class="lab"><b>博愛座標示 Sign</b>黃地板+標誌</div>
+  </div>
+</div>

@@ -1,0 +1,165 @@
+<!-- @dsCard group="車廂 Car" -->
+<title>EMU900 車廂內裝 — 線稿 / 像素全彩</title>
+<style>
+  :root{--green:#06ff31;--bg-wire:#1f241f;--mono:ui-monospace,"SF Mono","JetBrains Mono","Roboto Mono",Menlo,monospace}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:var(--mono);background:#0c0f0c;color:#cdd6cf;display:flex;flex-direction:column;min-height:100vh}
+  .bar{display:flex;gap:10px;align-items:center;padding:14px 18px;border-bottom:1px solid #1e261e}
+  .bar b{color:var(--green);letter-spacing:.12em;font-size:14px}.bar span{color:#77857a;font-size:12px}
+  .toggle{margin-left:auto;display:flex;border:1px solid #2a332a;border-radius:8px;overflow:hidden}
+  .toggle button{font-family:var(--mono);font-size:12px;letter-spacing:.1em;padding:8px 14px;border:0;cursor:pointer;background:#141a14;color:#8b978c}
+  .toggle button.on{background:var(--green);color:#06210c;font-weight:700}
+  .frame{flex:1;display:grid;place-items:center;padding:20px;transition:background .4s}
+  .frame.wire{background:var(--bg-wire)}.frame.pixel{background:#080b08}
+  svg,canvas{width:100%;max-width:1080px;height:auto}
+  #px{image-rendering:pixelated;border-radius:6px;display:none;box-shadow:0 24px 70px rgba(0,0,0,.6)}
+  .frame.pixel #px{display:block}.frame.pixel svg{display:none}
+  .draw{fill:none;stroke:var(--green);stroke-width:2.4;stroke-linejoin:round;stroke-linecap:round}
+  .thin{stroke-width:1.5;opacity:.75}.accent{stroke:var(--green);stroke-width:4;fill:none}
+  .led-p{fill:#0a120b;stroke:var(--green);stroke-width:1.5}.led-t{fill:var(--green)}
+  .strapp-s{stroke:var(--green);fill:none}.car{filter:drop-shadow(0 0 2.5px rgba(6,255,49,.6))}
+  .sign{fill:none;stroke:var(--green);stroke-width:1.5}
+</style>
+
+<div class="bar"><b>EMU900 車廂內裝</b><span>線稿藍圖 ↔ 像素全彩(夜間開燈)</span>
+  <div class="toggle"><button id="bw">線稿 WIRE</button><button id="bp" class="on">像素 PIXEL</button></div>
+</div>
+
+<div class="frame pixel" id="frame">
+  <svg viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid meet" aria-label="EMU900 車廂線稿">
+    <g class="car">
+      <rect class="led-p" x="300" y="16" width="1000" height="52" rx="8"/>
+      <text class="led-t" x="800" y="52" text-anchor="middle" style="font-size:30px;letter-spacing:6px;font-weight:700">區間車 · 往 記憶 FOR MEMORY ▸</text>
+      <rect class="draw" x="120" y="82" width="1360" height="46" rx="6"/>
+      <rect class="draw" x="360" y="92" width="160" height="26" rx="4"/><rect class="draw" x="1080" y="92" width="160" height="26" rx="4"/>
+      <rect class="accent" x="120" y="138" width="1360" height="7" rx="3.5"/>
+      <line class="draw" x1="260" y1="168" x2="1340" y2="168"/>
+      <g class="draw">
+        <line x1="380" y1="168" x2="380" y2="200"/><circle cx="380" cy="216" r="16"/>
+        <line x1="560" y1="168" x2="560" y2="200"/><circle cx="560" cy="216" r="16"/>
+        <line x1="740" y1="168" x2="740" y2="200"/><circle cx="740" cy="216" r="16"/>
+        <line x1="900" y1="168" x2="900" y2="200"/><circle cx="900" cy="216" r="16"/>
+      </g>
+      <g class="strapp-s"><line x1="1080" y1="168" x2="1080" y2="200"/><circle cx="1080" cy="216" r="16"/><line x1="1220" y1="168" x2="1220" y2="200"/><circle cx="1220" cy="216" r="16"/></g>
+      <rect class="draw" x="70" y="212" width="182" height="288" rx="16"/><rect class="draw" x="1348" y="212" width="182" height="288" rx="16"/>
+      <rect class="draw" x="456" y="184" width="688" height="612" rx="14"/>
+      <rect class="draw" x="486" y="212" width="628" height="378" rx="38"/>
+      <line class="draw thin" x1="800" y1="212" x2="800" y2="590"/><line class="draw thin" x1="800" y1="620" x2="800" y2="792"/>
+      <g class="draw"><path d="M300 168 V612"/><path d="M300 168 l-22 -26 M300 168 l22 -26 M300 168 v-30"/>
+        <path d="M1300 168 V612"/><path d="M1300 168 l-22 -26 M1300 168 l22 -26 M1300 168 v-30"/></g>
+      <g class="draw" id="seats"></g>
+      <line class="draw thin" x1="120" y1="792" x2="1480" y2="792"/>
+      <g><circle class="sign" cx="1300" cy="470" r="18"/><circle class="sign" cx="1300" cy="463" r="6"/><path class="sign" d="M1289 480 q11 -13 22 0"/></g>
+    </g>
+  </svg>
+  <canvas id="px" width="216" height="122"></canvas>
+</div>
+
+<script>
+  // ---- wire seats ----
+  const seatsG=document.getElementById('seats');
+  function wseat(x,pri){const s=document.createElementNS('http://www.w3.org/2000/svg','g');
+    s.innerHTML=`<rect x="${x+8}" y="500" width="104" height="104" rx="18"/>`+
+      `<line x1="${x+8}" y1="540" x2="${x+112}" y2="540" stroke-width="1.5" opacity="0.7"/>`+
+      `<rect x="${x}" y="598" width="120" height="74" rx="16"/>`+
+      `<path d="M${x+22} 672 v34 M${x+98} 672 v34"/>`+
+      (pri?`<rect x="${x+40}" y="512" width="40" height="34" rx="6" stroke-width="1.5"/>`:``);
+    seatsG.appendChild(s);}
+  [180,320,460].forEach(x=>wseat(x));[1000,1140].forEach(x=>wseat(x));wseat(1280,true);
+  function setT(t){const f=document.getElementById('frame');f.className='frame '+t;
+    bw.classList.toggle('on',t==='wire');bp.classList.toggle('on',t==='pixel');}
+  bw.addEventListener('click',()=>setT('wire'));bp.addEventListener('click',()=>setT('pixel'));
+
+  // ---- pixel-art renderer (night cabin, lights on) ----
+  // logical grid W×H; device buffer is K× finer so pixels read smaller (less "mosaic")
+  const cv=document.getElementById('px'),g=cv.getContext('2d'),K=2,W=216,H=122,DW=W*K,DH=H*K;
+  cv.width=DW;cv.height=DH;
+  const base=document.createElement('canvas');base.width=DW;base.height=DH;const gb=base.getContext('2d');
+  g.imageSmoothingEnabled=false;gb.imageSmoothingEnabled=false;
+  let ctx=g;                                    // R() draws to whichever ctx is active
+  const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  const P={wall:'#20302b',wallLo:'#16211d',ceil:'#131c19',band:'#1b2823',ad:'#243530',
+    green:'#3f7a2c',greenHi:'#6eb43f',metal:'#586462',metalD:'#333d3b',glint:'#93a49f',
+    seat:'#5f7f92',seatHi:'#93b9cf',seatD:'#3c5261',seatLeg:'#283539',
+    pink:'#9c6f7e',pinkHi:'#d79fb2',pinkD:'#653f4b',pinkLeg:'#402c33',
+    yellow:'#b28a22',yellowHi:'#f2c230',yellowD:'#6f5514',
+    floor:'#1a2422',floorD:'#101815',s1:'#b2380c',s2:'#ea8330',s3:'#f2ac57',night:'#241a12',night2:'#0d0a07',
+    bldg:'#0a0d0a',light:'#ffc34d',led:'#0a0d0a',ledg:'#06ff31',lamp:'#fff2cf',glass:'#ffffff'};
+  const R=(x,y,w,h,c)=>{ctx.fillStyle=c;ctx.fillRect(Math.round(x*K),Math.round(y*K),Math.max(1,Math.round(w*K)),Math.max(1,Math.round(h*K)));};
+  const PX=(dx,dy,c)=>{ctx.fillStyle=c;ctx.fillRect(dx,dy,1,1);};        // one device pixel
+  const bay=[[0,8,2,10],[12,4,14,6],[3,11,1,9],[15,7,13,5]];
+  const dith=(dx,dy,t)=>(bay[(dy&3)][(dx&3)]/16)<t;                      // dither at device resolution
+  const inWin=(x,y)=>(x>=64&&x<152&&y>=26&&y<74)||(x>=10&&x<32&&y>=28&&y<62)||(x>=184&&x<206&&y>=28&&y<62);
+  function sky(x0,y0,x1,y1){const h=y1-y0;
+    for(let dy=y0*K;dy<y1*K;dy++){const f=(dy/K-y0)/h;let a,b,l;
+      if(f<.42){a=P.s1;b=P.s2;l=f/.42;}else if(f<.66){a=P.s2;b=P.s3;l=(f-.42)/.24;}
+      else if(f<.72){a=P.s3;b=P.night;l=(f-.66)/.06;}else{a=P.night;b=P.night2;l=(f-.72)/.28;}
+      for(let dx=x0*K;dx<x1*K;dx++)PX(dx,dy,dith(dx,dy,l)?b:a);}}
+  let bld=[];(function(){let x=0;while(x<W){const w=2+((Math.random()*7)|0),h=4+((Math.random()*22)|0);
+    const li=[];for(let ly=1;ly<h-1;ly+=2)for(let lx=1;lx<w-1;lx+=2)if(Math.random()>.5)li.push([lx,ly]);
+    bld.push({x,w,h,li});x+=w+1+((Math.random()*4)|0);}})();
+  // pre-bake a seamless skyline strip (buildings drawn twice for wrap); blit a slice each frame
+  const SH=30,strip=document.createElement('canvas');strip.width=W*2*K;strip.height=SH*K;const gs=strip.getContext('2d');gs.imageSmoothingEnabled=false;
+  for(const b of bld){for(const o of[0,W]){gs.fillStyle=P.bldg;gs.fillRect((b.x+o)*K,(SH-b.h)*K,b.w*K,b.h*K);
+    gs.fillStyle=P.light;for(const[lx,ly]of b.li)gs.fillRect((b.x+o+lx)*K,(SH-b.h+ly)*K,K,K);}}
+  function ring(cx,cy,c){[[0,-2],[-1,-1],[1,-1],[-2,0],[2,0],[-1,1],[1,1],[0,2]].forEach(([dx,dy])=>R(cx+dx,cy+dy,1,1,c));}
+  function pole(x){R(x,20,2,54,P.metal);R(x,20,1,54,P.glint);R(x-4,16,1,4,P.metal);R(x+5,16,1,4,P.metal);R(x,14,2,6,P.metal);}
+  function seat(x,y,w,c,hi,sh,leg){R(x+3,y-3,w-6,3,c);
+    R(x+1,y,w-2,9,c);R(x+1,y,w-2,1,hi);R(x+1,y+8,w-2,1,sh);
+    R(x,y+6,1,11,leg);R(x+w-1,y+6,1,11,leg);
+    R(x,y+10,w,6,c);R(x,y+10,w,1,hi);R(x,y+15,w,1,sh);
+    R(x+2,y+17,2,3,leg);R(x+w-4,y+17,2,3,leg);R(x-1,y+20,w+2,1,P.floorD);}
+  const LAMPS=[40,108,176];
+  function lampFixture(cx){R(cx-11,21,22,2,P.lamp);R(cx-11,23,22,1,'rgba(255,240,200,0.55)');
+    for(let dy=19*K;dy<27*K;dy++)for(let dx=(cx-15)*K;dx<(cx+15)*K;dx++){const x=dx/K,y=dy/K;
+      const t=(1-Math.abs(x-cx)/15)*(1-Math.abs(y-22)/5)*0.55;if(t>0.05&&dith(dx,dy,t))PX(dx,dy,'rgba(255,238,195,0.30)');}}
+  function pool(cx){for(let dy=24*K;dy<DH;dy++){const y=dy/K,hw=8+(y-24)*0.6,fade=Math.max(0,1-(y-24)/(H-24));
+    for(let dx=Math.floor((cx-hw)*K);dx<(cx+hw)*K;dx++){const x=dx/K;if(x<2||x>=W-2||inWin(x,y))continue;
+      const t=fade*0.85*(1-Math.abs(x-cx)/hw);if(t>0.03&&dith(dx,dy,t))PX(dx,dy,'rgba(255,233,183,0.16)');}}}
+  function vignette(){for(let dy=0;dy<DH;dy++)for(let dx=0;dx<DW;dx++){const x=dx/K,y=dy/K;if(inWin(x,y))continue;
+    const e=Math.min(Math.min(x,W-1-x)/34,Math.min(y,H-1-y)/26,1);const t=(1-e)*0.7;
+    if(t>0.06&&dith(dx,dy,t))PX(dx,dy,'rgba(4,7,6,0.55)');}}
+
+  // ---- bake static scene + lighting once ----
+  function renderStatic(){
+    ctx=gb;
+    R(0,0,W,H,P.wall);R(0,0,W,11,P.ceil);
+    R(40,2,136,8,P.led);
+    R(14,12,188,5,P.band);R(40,13,20,3,P.ad);R(156,13,20,3,P.ad);
+    R(14,18,188,2,P.green);R(14,20,188,1,P.greenHi);
+    R(34,23,148,1,P.metalD);
+    R(10,28,22,34,P.night2);sky(10,28,32,60);R(184,28,22,34,P.night2);sky(184,28,206,60);
+    sky(64,26,152,74);R(64,72,88,1,'#2a1e12');
+    ctx.strokeStyle=P.metalD;ctx.lineWidth=K;ctx.strokeRect(62.5*K,24.5*K,90*K,49*K);R(107,26,1,46,P.metalD);
+    pole(61);pole(151);
+    [78,98,118,138].forEach(x=>{R(x,23,1,4,P.metalD);ring(x,30,P.metal);});
+    [168,186].forEach(x=>{R(x,23,1,4,P.yellowD);ring(x,30,P.yellowHi);});
+    seat(14,74,14,P.seat,P.seatHi,P.seatD,P.seatLeg);seat(30,74,14,P.seat,P.seatHi,P.seatD,P.seatLeg);
+    seat(46,74,14,P.seat,P.seatHi,P.seatD,P.seatLeg);seat(154,74,14,P.seat,P.seatHi,P.seatD,P.seatLeg);
+    seat(170,74,14,P.seat,P.seatHi,P.seatD,P.seatLeg);seat(186,74,14,P.pink,P.pinkHi,P.pinkD,P.pinkLeg);
+    R(0,94,W,H-94,P.floor);R(0,94,W,1,P.floorD);
+    R(182,94,22,H-94,P.yellow);R(182,94,22,1,P.yellowD);
+    R(188,64,8,8,'#0b4da2');R(191,66,2,2,P.glass);R(190,69,4,1,P.glass);
+    // static lighting
+    LAMPS.forEach(pool);LAMPS.forEach(lampFixture);
+    for(let dy=94*K;dy<DH;dy++){const y=dy/K,t=(1-(y-94)/(H-94))*0.4;for(let dx=66*K;dx<150*K;dx++)if(dith(dx,dy,t))PX(dx,dy,'rgba(240,150,72,0.13)');}
+    for(const s of [[64,152],[10,32],[184,206]]){
+      for(let dy=27*K;dy<30*K;dy++)for(let dx=s[0]*K;dx<s[1]*K;dx++)if(dith(dx,dy,0.45))PX(dx,dy,'rgba(6,255,49,0.10)');
+      for(let dy=30*K;dy<34*K;dy++)for(let dx=s[0]*K;dx<s[1]*K;dx++)if(dith(dx,dy,0.3))PX(dx,dy,'rgba(255,235,188,0.09)');}
+    vignette();
+    ctx=g;
+  }
+
+  // ---- per-frame: blit static + cheap animated overlays ----
+  let off=0;
+  function frame(){
+    g.drawImage(base,0,0);ctx=g;
+    g.drawImage(strip,(off%W)*K,0,88*K,SH*K,64*K,(73-SH)*K,88*K,SH*K);   // moving city outside the door window
+    for(let x=44;x<172;x+=3){if(((x+((off*0.6)|0))%9)<6)R(x,4,2,4,P.ledg);}   // LED marquee
+    const sw=((off*2.4)%(W+100))-50;                         // passing external light sweep
+    for(let dx=Math.floor((sw-6)*K);dx<(sw+6)*K;dx++){const x=dx/K;if(x<0||x>=W)continue;const d=1-Math.abs(x-sw)/6;
+      for(let dy=22*K;dy<DH;dy++){const y=dy/K;if(!inWin(x,y)&&dith(dx,dy,d*0.4))PX(dx,dy,'rgba(255,220,160,0.15)');}}
+    if(reduce)return;off+=0.35;requestAnimationFrame(frame);
+  }
+  renderStatic();frame();
+</script>

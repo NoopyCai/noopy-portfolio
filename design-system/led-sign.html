@@ -1,0 +1,21 @@
+<!-- @dsCard group="元件 Elements" -->
+<title>LED 報站顯示器 — Destination Sign</title>
+<style>
+  :root{--green:#06ff31;--mono:ui-monospace,"SF Mono","JetBrains Mono","Roboto Mono",Menlo,monospace}
+  body{margin:0;background:#0c0f0c;color:#cdd6cf;font-family:var(--mono);
+    min-height:100vh;display:flex;flex-direction:column;gap:18px;justify-content:center;padding:28px}
+  h1{font-size:14px;letter-spacing:.14em;color:var(--green);margin:0}
+  p{color:#77857a;font-size:12px;margin:0;line-height:1.7}
+  .led{position:relative;height:60px;overflow:hidden;background:#080a08;border:1px solid #1a201a;border-radius:6px}
+  .led-in{white-space:nowrap;line-height:60px;font-weight:700;font-size:26px;letter-spacing:.14em;
+    color:var(--green);text-shadow:0 0 8px rgba(6,255,49,.9);animation:m 22s linear infinite}
+  .led::after{content:"";position:absolute;inset:0;pointer-events:none;mix-blend-mode:multiply;
+    background-image:radial-gradient(circle,rgba(0,0,0,.62) 1.1px,transparent 1.6px);background-size:4px 4px}
+  @keyframes m{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+  .small{height:40px}.small .led-in{line-height:40px;font-size:17px}
+  @media(prefers-reduced-motion:reduce){.led-in{animation:none}}
+</style>
+<h1>LED 報站顯示器 Destination Sign</h1>
+<div class="led"><div class="led-in">區間車 EMU900　·　往 記憶 FOR MEMORY LANE　·　下一站 電商推薦系統　NEXT: RECOMMENDATION SYSTEM ▸　　區間車 EMU900　·　往 記憶 FOR MEMORY LANE　·　下一站 電商推薦系統　NEXT: RECOMMENDATION SYSTEM ▸</div></div>
+<div class="led small"><div class="led-in">本次列車 為 蔡守傑 NoopyCai 作品集　·　THIS SERVICE — NoopyCai Portfolio　·　本次列車 為 蔡守傑 NoopyCai 作品集　·　THIS SERVICE — NoopyCai Portfolio　</div></div>
+<p>字型:英數用 <b>Departure Mono / VT323</b>（SIL OFL）,中文用 <b>Noto Sans TC Bold</b>,疊點陣遮罩做 LED 顆粒感,取代付費 Mobitec。綠字 <b>#06ff31</b> on 近黑 <b>#080a08</b>。</p>
