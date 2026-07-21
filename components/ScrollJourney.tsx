@@ -7,13 +7,15 @@ import { phaseOf, fillAmount, rideProgress, lerpGrade, clamp } from "@/lib/progr
 import { WireCar } from "./WireCar";
 import { CabinComposite } from "./CabinComposite";
 import { StationPanel } from "./StationPanel";
+import { playArrivalChime } from "./SoundToggle";
 import { useLang } from "./LangProvider";
 
 gsap.registerPlugin(ScrollTrigger);
 
-export function ScrollJourney() {
+export function ScrollJourney({ soundOn }: { soundOn: boolean }) {
   const wrap = useRef<HTMLDivElement>(null);
   const stage = useRef<HTMLDivElement>(null);
+  const prevIndex = useRef(-1);
   const [p, setP] = useState(0);
 
   useEffect(() => {
@@ -41,6 +43,13 @@ export function ScrollJourney() {
   const hi = STATIONS[Math.min(Math.ceil(x), n - 1)];
   const grade = lerpGrade(lo.grade, hi.grade, x - Math.floor(x));
   const cur = STATIONS[index];
+
+  useEffect(() => {
+    if (phase === "ride" && index !== prevIndex.current) {
+      if (soundOn) playArrivalChime();
+      prevIndex.current = index;
+    }
+  }, [phase, index, soundOn]);
 
   return (
     <div ref={wrap} style={{ position: "relative" }}>
