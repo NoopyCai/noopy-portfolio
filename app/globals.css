@@ -37,3 +37,14 @@ a { color: var(--green); }
 .ctrl:hover { border-color: var(--green); color: var(--green); }
 
 @media (prefers-reduced-motion: reduce) { .led-run { animation: none; } }
+
+/* 綠色線稿車廂(Boot) */
+.wirecar { width: 100%; height: 100%; filter: drop-shadow(0 0 2.5px rgba(6, 255, 49, .55)); }
+.wirecar .draw { fill: none; stroke: var(--green); stroke-width: 2.4; stroke-linejoin: round; stroke-linecap: round; }
+.wirecar .thin { stroke-width: 1.5; opacity: .75; }
+.wirecar .accent { stroke: var(--green); stroke-width: 4; fill: none; }
+.wirecar .led-p { fill: #0a120b; stroke: var(--green); stroke-width: 1.5; }
+.wirecar .led-t { fill: var(--green); }
+.wirecar .strapp-s { stroke: var(--green); fill: none; }
+.wirecar .sign { fill: none; stroke: var(--green); stroke-width: 1.5; }
+.wirecar .winfill { fill: var(--green); opacity: .85; transform-box: fill-box; transform-origin: left center; }
