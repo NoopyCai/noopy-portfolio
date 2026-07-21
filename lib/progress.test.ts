@@ -1,0 +1,32 @@
+import { describe, it, expect } from "vitest";
+import { fillAmount, phaseOf, rideProgress, stationAt, lerpGrade } from "./progress";
+import type { Grade } from "@/content/stations";
+
+describe("progress", () => {
+  it("fillAmount ramps 0→1 across boot", () => {
+    expect(fillAmount(0)).toBe(0);
+    expect(fillAmount(0.05)).toBeCloseTo(0.5, 1);
+    expect(fillAmount(0.1)).toBe(1);
+    expect(fillAmount(0.5)).toBe(1);
+  });
+  it("phaseOf splits boot/gate/ride", () => {
+    expect(phaseOf(0.05)).toBe("boot");
+    expect(phaseOf(0.13)).toBe("gate");
+    expect(phaseOf(0.9)).toBe("ride");
+  });
+  it("rideProgress 0 at gateEnd, 1 at end", () => {
+    expect(rideProgress(0.16)).toBeCloseTo(0, 5);
+    expect(rideProgress(1)).toBeCloseTo(1, 5);
+  });
+  it("stationAt maps ride progress to station index", () => {
+    expect(stationAt(0, 6).index).toBe(0);
+    expect(stationAt(0.99, 6).index).toBe(5);
+  });
+  it("lerpGrade blends grade colour and switches filter at midpoint", () => {
+    const a: Grade = { filter: "brightness(1)", grade: "rgba(0,0,0,0)", blend: "soft-light" };
+    const b: Grade = { filter: "brightness(2)", grade: "rgba(100,100,100,1)", blend: "screen" };
+    expect(lerpGrade(a, b, 0).filter).toBe("brightness(1)");
+    expect(lerpGrade(a, b, 1).filter).toBe("brightness(2)");
+    expect(lerpGrade(a, b, 0.5).grade).toBe("rgba(50,50,50,0.500)");
+  });
+});
