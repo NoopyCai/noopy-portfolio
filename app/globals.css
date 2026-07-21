@@ -48,3 +48,8 @@ a { color: var(--green); }
 .wirecar .strapp-s { stroke: var(--green); fill: none; }
 .wirecar .sign { fill: none; stroke: var(--green); stroke-width: 1.5; }
 .wirecar .winfill { fill: var(--green); opacity: .85; transform-box: fill-box; transform-origin: left center; }
+
+/* Start ride 按鈕 */
+.start { font-family: var(--font-led); font-size: clamp(20px, 3vw, 34px); letter-spacing: .14em; color: var(--green); background: none; border: none; cursor: pointer; text-shadow: 0 0 12px rgba(6, 255, 49, .9), 0 0 30px rgba(6, 255, 49, .5); animation: pulse 2.2s ease-in-out infinite; }
+@keyframes pulse { 50% { text-shadow: 0 0 20px rgba(6, 255, 49, 1), 0 0 44px rgba(6, 255, 49, .7); } }
+@media (prefers-reduced-motion: reduce) { .start { animation: none; } }
