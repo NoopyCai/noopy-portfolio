@@ -26,3 +26,14 @@ html, body {
   -webkit-font-smoothing: antialiased;
 }
 a { color: var(--green); }
+
+/* LED 報站跑馬燈 */
+.led { position: relative; width: 100%; height: 100%; overflow: hidden; background: #050805; display: flex; align-items: center; }
+.led-run { white-space: nowrap; font-family: var(--font-led); font-weight: 700; font-size: clamp(9px, 1.35vw, 19px); letter-spacing: .12em; color: var(--green); text-shadow: 0 0 6px rgba(6, 255, 49, .85); animation: marq 20s linear infinite; }
+@keyframes marq { from { transform: translateX(28%); } to { transform: translateX(-72%); } }
+
+/* 控制鈕(語言 / 音效) */
+.ctrl { font-family: var(--font-led); font-size: 12px; letter-spacing: .08em; cursor: pointer; color: var(--text); background: rgba(13, 21, 36, .72); border: 1px solid var(--line); backdrop-filter: blur(8px); padding: 7px 11px; border-radius: 8px; }
+.ctrl:hover { border-color: var(--green); color: var(--green); }
+
+@media (prefers-reduced-motion: reduce) { .led-run { animation: none; } }
