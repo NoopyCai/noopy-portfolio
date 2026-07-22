@@ -7,3 +7,5 @@ dist/
 .vercel
 .superpowers/
 .env*
+*.tsbuildinfo
+next-env.d.ts
