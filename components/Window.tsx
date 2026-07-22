@@ -17,7 +17,7 @@ function blit(c: HTMLCanvasElement | null, strip: HTMLCanvasElement | null, pan:
   if (c.height !== H) c.height = H;
   const g = c.getContext("2d")!;
   g.imageSmoothingEnabled = false;
-  const off = ((((pan * PAN_LOOPS) % 1) + 1) % 1) * SW;
+  const off = Math.round(((((pan * PAN_LOOPS) % 1) + 1) % 1) * SW); // 整數對齊,避免抖色爬行閃爍
   g.clearRect(0, 0, W, H);
   g.drawImage(strip, -off, 0);
   g.drawImage(strip, SW - off, 0);
