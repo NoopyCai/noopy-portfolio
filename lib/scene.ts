@@ -1,7 +1,7 @@
 import type { SceneType } from "@/content/stations";
 
-// 像素窗景渲染 — 移植自 design-system/car-ride.html(已驗證的原型),演算法不變。
-// bg:true 時略過單一地標(月亮/太陽/101/漁舍/船/岬角),供側窗使用。
+// 像素窗景渲染(重新設計:多層次視差 + 大氣細節)。
+// 背景元素先畫(bg/full 皆有,tile 無縫);單一地標放在 if(!bg) 末段(只在中段出現一次)。
 const bay = [
   [0, 8, 2, 10],
   [12, 4, 14, 6],
@@ -9,11 +9,7 @@ const bay = [
   [15, 7, 13, 5],
 ];
 
-export function drawScene(
-  canvas: HTMLCanvasElement,
-  type: SceneType,
-  opts: { bg?: boolean } = {}
-) {
+export function drawScene(canvas: HTMLCanvasElement, type: SceneType, opts: { bg?: boolean } = {}) {
   const bg = !!opts.bg;
   const K = 2, W = 208, H = 130, DW = W * K, DH = H * K;
   canvas.width = DW;
@@ -27,6 +23,7 @@ export function drawScene(
     g.fillRect(Math.round(x * K), Math.round(y * K), Math.max(1, Math.round(w * K)), Math.max(1, Math.round(h * K)));
   };
   const rnd = ((s: number) => () => ((s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff))(type.length * 97 + 7);
+  // 垂直漸層 + 抖色
   function grad(y0: number, y1: number, stops: [number, string][]) {
     for (let dy = y0 * K; dy < y1 * K; dy++) {
       const f = (dy / K - y0) / (y1 - y0);
@@ -45,66 +42,123 @@ export function drawScene(
         else if (d < r + glow && dith(dx, dy, 1 - (d - r) / glow)) PX(dx, dy, c);
       }
   }
-
-  if (type === "city") {
-    grad(0, H, [[0, "#b2380c"], [0.4, "#ea8330"], [0.62, "#f2ac57"], [0.66, "#141810"], [1, "#0a0d0a"]]);
+  // 遠山/剪影稜線:crest 到 bottom 填色
+  function ridge(crest: number, bottom: number, color: string, a1: number, a2: number, ph: number, freq = 0.05) {
+    for (let x = 0; x < W; x++) {
+      const h = (crest + Math.sin(x * freq + ph) * a1 + Math.sin(x * freq * 2.7 + ph * 1.6) * a2) | 0;
+      for (let dy = h * K; dy < bottom * K; dy++) { PX(x * K, dy, color); PX(x * K + 1, dy, color); }
+    }
+  }
+  function stars(n: number, maxY: number) {
+    for (let i = 0; i < n; i++) { const sx = (rnd() * W) | 0, sy = (rnd() * maxY) | 0; PX(sx * K, sy * K, rnd() > 0.6 ? "#eaf2ff" : "#9fb6e0"); }
+  }
+  // 一排建築(含亮窗),tile 用
+  function skyline(baseY: number, minH: number, maxH: number, color: string, lit: boolean) {
     let x = 0;
     while (x < W) {
-      const w = 4 + ((rnd() * 16) | 0), h = 10 + ((rnd() * 46) | 0);
-      R(x, 86 - h, w, h, "#0b0f0b");
-      for (let ly = 88 - h; ly < 86; ly += 3) for (let lx = x + 1; lx < x + w - 1; lx += 3) if (rnd() > 0.5) R(lx, ly, 1, 1, "#ffb24d");
-      x += w + 2 + ((rnd() * 5) | 0);
+      const w = 4 + ((rnd() * 14) | 0), h = minH + ((rnd() * (maxH - minH)) | 0);
+      R(x, baseY - h, w, h, color);
+      if (lit) for (let ly = baseY - h + 2; ly < baseY - 1; ly += 3) for (let lx = x + 1; lx < x + w - 1; lx += 3) if (rnd() > 0.5) R(lx, ly, 1, 1, "#ffcf7a");
+      x += w + 1 + ((rnd() * 3) | 0);
     }
-    R(0, 86, W, H, "#0a0d0a");
-  } else if (type === "platform") {
-    grad(0, 64, [[0, "#141d33"], [1, "#241a14"]]); R(0, 64, W, H, "#0c110e");
-    for (let i = 0; i < 5; i++) {
-      const px = 12 + i * 46; R(px, 20, 7, 50, "#0a0f0c"); R(px, 18, 7, 2, "#fff2cf");
-      for (let dy = 20 * K; dy < 40 * K; dy++) for (let dx = (px - 3) * K; dx < (px + 10) * K; dx++) {
-        const t = (1 - Math.abs(dx / K - (px + 3.5)) / 7) * (1 - (dy / K - 20) / 20) * 0.5;
-        if (t > 0.05 && dith(dx, dy, t)) PX(dx, dy, "rgba(255,238,195,0.3)");
+  }
+  function waves(y0: number, color: string, amp: number) {
+    for (let wy = y0; wy < H; wy += 3) for (let dx = 0; dx < DW; dx++) { const t = (1 - (wy - y0) / (H - y0)) * amp; if (dith(dx, wy * K, t)) PX(dx, wy * K, color); }
+  }
+  function reflectCol(cx: number, y0: number, color: string, alpha: number) {
+    for (let dy = y0 * K; dy < DH; dy++) { const t = (1 - (dy / K - y0) / (H - y0)) * alpha; for (let dx = (cx - 3) * K; dx < (cx + 3) * K; dx++) if (dith(dx, dy + cx * 5, t)) PX(dx, dy, color); }
+  }
+
+  if (type === "platform") {
+    // 夜間月台:暗、暖燈光池、黃色警戒線、綠色站名燈牌
+    grad(0, 20, [[0, "#0a1120"], [1, "#151f30"]]);
+    R(0, 0, W, 9, "#080d15"); // 頂棚
+    R(0, 20, W, H, "#0e1622"); // 對向牆
+    for (let i = 0; i < 6; i++) { // 立柱 + 頂燈 + 光池
+      const px = 6 + i * 40;
+      R(px, 9, 6, 60, "#0a0f18");
+      R(px - 1, 7, 8, 2, "#fff2cf");
+      for (let dy = 9 * K; dy < 46 * K; dy++) for (let dx = (px - 4) * K; dx < (px + 10) * K; dx++) {
+        const t = (1 - Math.abs(dx / K - (px + 3)) / 8) * (1 - (dy / K - 9) / 37) * 0.5;
+        if (t > 0.05 && dith(dx, dy, t)) PX(dx, dy, "rgba(255,236,190,0.32)");
       }
+      R(px - 6, 52, 18, 6, "#101826"); // 長椅
     }
-    R(0, 96, W, 4, "#f2c230"); for (let x = 0; x < W; x += 8) R(x, 96, 4, 4, "#c99a1a"); R(0, 100, W, H, "#11161a");
-    for (let dy = 100 * K; dy < DH; dy++) for (let dx = 0; dx < DW; dx++) { const t = (1 - (dy / K - 100) / 30) * 0.35; if (dith(dx, dy, t)) PX(dx, dy, "rgba(255,220,150,0.10)"); }
-    if (!bg) { R(70, 30, 68, 22, "#06110a"); R(72, 32, 64, 18, "#0a1f10"); for (let x = 78; x < 130; x += 4) R(x, 38, 2, 6, "#06ff31"); }
+    R(0, 92, W, 4, "#f2c230"); for (let x = 0; x < W; x += 8) R(x, 92, 4, 4, "#c99a1a"); // 警戒線
+    R(0, 96, W, H, "#0c121b"); // 月台地面
+    for (let dy = 96 * K; dy < DH; dy++) for (let dx = 0; dx < DW; dx++) { const t = (1 - (dy / K - 96) / 34) * 0.3; if (dith(dx, dy, t)) PX(dx, dy, "rgba(255,220,150,0.10)"); }
+    if (!bg) { R(74, 30, 60, 20, "#05110a"); R(76, 32, 56, 16, "#0a1f10"); for (let x = 82; x < 126; x += 4) R(x, 38, 2, 6, "#06ff31"); } // 站名燈牌
+  } else if (type === "city") {
+    // 電商推薦系統:黃昏城市(紫→橘→琥珀,三層天際線)
+    grad(0, 80, [[0, "#3a2350"], [0.32, "#a83a2e"], [0.58, "#e8792a"], [0.78, "#f4b45c"], [0.8, "#120e18"]]);
+    ridge(66, 82, "#241a2e", 3, 2, 0.4); // 遠山/霧帶
+    skyline(74, 8, 22, "#1a1420", false); // 遠景剪影
+    skyline(82, 16, 42, "#0d0a12", true);  // 中景亮窗
+    R(0, 82, W, H, "#0a0810");
+    skyline(96, 10, 30, "#080609", true);  // 近景(較高、較暗)
+    if (!bg) disc(150, 30, 8, "#ffdca0", 10); // 夕陽
   } else if (type === "river") {
-    grad(0, 84, [[0, "#0a1730"], [0.55, "#12294a"], [0.8, "#1c3a5e"], [1, "#12233b"]]); if (!bg) disc(150, 26, 9, "#e9edd6", 6);
-    R(0, 60, W, 4, "#0c1a2c"); for (let i = 0; i < 4; i++) R(20 + i * 46, 52, 3, 10, "#0d1f33");
-    R(0, 58, W, 2, "#33506e"); for (let x = 0; x < W; x += 6) R(x, 55, 1, 4, "#5a7ea0"); for (let x = 8; x < W; x += 14) R(x, 54, 2, 2, "#ffd27a");
-    R(0, 84, W, H, "#0a1626");
-    [30, 150, 70, 110, 180].forEach((cx) => { for (let dy = 84 * K; dy < DH; dy++) { const t = (1 - (dy / K - 84) / 44) * 0.55; for (let dx = (cx - 2) * K; dx < (cx + 2) * K; dx++) if (dith(dx, dy + cx * 7, t)) PX(dx, dy, "rgba(255,210,120,0.5)"); } });
-  } else if (type === "taipei") {
-    grad(0, 62, [[0, "#4f9fe0"], [0.55, "#93c6ec"], [0.9, "#d4e9f6"], [1, "#eaf4fb"]]); if (!bg) disc(24, 18, 6, "#fff6d8", 9);
-    const cloud = (cx: number, cy: number) => ([[0, 0, 10, 3], [3, -2, 6, 2], [-3, 1, 5, 2]] as number[][]).forEach(([ox, oy, w, h]) => R(cx + ox, cy + oy, w, h, "#f4f9fd"));
-    cloud(60, 13); cloud(158, 22);
-    for (let x = 0; x < W; x++) { const h = (50 + Math.sin(x * 0.05) * 6 + Math.sin(x * 0.14) * 3) | 0; for (let dy = h * K; dy < 64 * K; dy++) { PX(x * K, dy, "#5f8a72"); PX(x * K + 1, dy, "#5f8a72"); } }
-    function bldg(x: number, w: number, top: number, c: string) { R(x, top, w, 106 - top, c); R(x, top, w, 1, "rgba(255,255,255,0.28)"); for (let wy = top + 3; wy < 104; wy += 4) for (let wx = x + 2; wx < x + w - 1; wx += 3) if ((wx + wy) % 5 < 3) R(wx, wy, 1, 2, "rgba(255,255,255,0.34)"); }
-    bldg(2, 16, 74, "#8a94a0"); bldg(20, 14, 66, "#9aa2ad"); bldg(36, 18, 80, "#7f8893"); bldg(56, 15, 72, "#93a0ac"); bldg(73, 18, 82, "#88919d"); bldg(94, 13, 76, "#9ba6b2"); bldg(150, 20, 70, "#8a94a0"); bldg(172, 15, 78, "#95a0ac"); bldg(189, 17, 72, "#828c98");
+    // LINE LIFF:夜間跨河大橋 + 月光倒影
+    grad(0, 84, [[0, "#060a18"], [0.5, "#0d1c38"], [0.78, "#183a60"], [0.8, "#0a1526"]]);
+    stars(26, 46);
+    ridge(58, 66, "#0a1424", 3, 2, 1.2); // 遠岸城市剪影帶
+    for (let x = 2; x < W; x += 5) if (rnd() > 0.5) R(x, 60 + ((rnd() * 4) | 0), 1, 1, "#ffb26a"); // 遠岸燈火
+    R(0, 84, W, H, "#08111f"); // 水面
+    waves(86, "rgba(90,140,200,0.4)", 0.3);
     if (!bg) {
-      const tx = 128; R(tx - 1, 14, 2, 12, "#9fb8b2"); R(tx, 10, 1, 4, "#c8d8d4"); R(tx - 6, 26, 12, 4, "#7fa199");
-      for (let s = 0; s < 8; s++) { const y = 30 + s * 8; R(tx - 8, y, 16, 8, "#6f9e94"); R(tx - 9, y, 18, 2, "#8fbcb1"); R(tx - 8, y + 7, 16, 1, "#4d7168"); }
-      R(tx - 13, 94, 26, 12, "#5c7f77"); R(tx - 13, 94, 26, 1, "#7fa199");
-      for (let dy = 32 * K; dy < 93 * K; dy += 2) for (let dx = (tx - 6) * K; dx < (tx + 6) * K; dx += 3) if ((dx + dy) % 4 < 2) PX(dx, dy, "rgba(232,246,243,0.25)");
+      disc(150, 26, 9, "#eaf0d8", 6); // 月亮
+      // 懸索橋:塔 + 主纜 + 吊索 + 橋面 + 燈串
+      R(52, 40, 3, 46, "#26374f"); R(150, 40, 3, 46, "#26374f");
+      for (let x = 55; x < 150; x++) { const y = (52 + Math.cosh((x - 101) / 40) * 6) | 0; R(x, y, 1, 1, "#4a6580"); if (x % 8 === 0) R(x, y, 1, 84 - y, "#1c2a3c"); }
+      R(0, 84, W, 2, "#33506e"); for (let x = 6; x < W; x += 12) R(x, 82, 2, 2, "#ffd27a");
+      reflectCol(150, 86, "rgba(234,240,216,0.5)", 0.6); // 月光柱
+      [60, 110, 168].forEach((cx) => reflectCol(cx, 88, "rgba(255,210,120,0.4)", 0.4)); // 橋燈倒影
     }
-    const Sg = ["#d64b3f", "#e0a53f", "#2f8f4f", "#3f6fd6", "#c23f8f", "#e8542f"];
-    const hs = (x: number, y: number, w: number, c: string) => { R(x, y, w, 7, c); R(x, y, w, 1, "rgba(255,255,255,0.5)"); for (let a = x + 1; a < x + w - 1; a += 4) R(a, y + 2, 3, 3, "rgba(255,255,255,0.92)"); };
-    const vs = (x: number, y: number, h: number, c: string) => { R(x, y, 4, h, c); R(x, y, 4, 1, "rgba(255,255,255,0.5)"); for (let a = y + 1; a < y + h - 1; a += 4) R(x + 1, a, 2, 3, "rgba(255,255,255,0.92)"); };
-    hs(3, 86, 14, Sg[0]); hs(22, 80, 11, Sg[1]); hs(38, 92, 16, Sg[2]); hs(57, 84, 13, Sg[3]); hs(74, 94, 16, Sg[4]); hs(151, 84, 17, Sg[5]); hs(190, 88, 15, Sg[0]);
-    vs(17, 80, 22, Sg[1]); vs(70, 84, 24, Sg[2]); vs(147, 74, 30, Sg[3]); vs(187, 78, 22, Sg[5]);
-    R(0, 104, W, H, "#3a3f45"); R(0, 104, W, 2, "#4a4f55"); for (let x = 0; x < W; x += 14) R(x, 113, 7, 2, "#d8d2b8");
-    R(20, 110, 20, 7, "#d64b3f"); R(22, 107, 15, 4, "#d64b3f"); R(24, 108, 10, 2, "#bfe6f4"); R(120, 111, 16, 6, "#eef2f5"); R(122, 108, 11, 4, "#eef2f5"); R(123, 109, 8, 2, "#bfe6f4");
-  } else if (type === "field") {
-    grad(0, 80, [[0, "#c2531a"], [0.4, "#ea8330"], [0.6, "#f2c07a"], [0.66, "#3a4a2c"], [1, "#1a2416"]]);
-    for (let x = 0; x < W; x++) { const m = (54 + Math.sin(x * 0.05) * 6 + Math.sin(x * 0.13) * 4) | 0; for (let dy = m * K; dy < 80 * K; dy++) { PX(x * K, dy, "#243018"); PX(x * K + 1, dy, "#243018"); } }
-    R(0, 80, W, H, "#16210f"); for (let ry = 84; ry < H; ry += 6) for (let dx = 0; dx < DW; dx++) { const t = (1 - (ry - 84) / 46) * 0.4; if (dith(dx, ry * K, t)) PX(dx, ry * K, "rgba(242,170,90,0.4)"); }
-    for (let i = 0; i < 6; i++) R(16 + i * 32 + ((rnd() * 10) | 0), 56 + ((rnd() * 4) | 0), 1, 1, "#ffd27a"); if (!bg) { R(150, 48, 10, 8, "#0e160a"); R(151, 45, 8, 3, "#0e160a"); }
-  } else if (type === "sea") {
-    grad(0, 74, [[0, "#182a4a"], [0.34, "#b8492a"], [0.5, "#f2a25a"], [0.6, "#f6c98a"], [1, "#0d2438"]]); if (!bg) disc(70, 52, 8, "#ffe9c2", 7);
-    R(0, 74, W, H, "#0a1c2c"); for (let wy = 76; wy < H; wy += 5) for (let dx = 0; dx < DW; dx++) { const t = (1 - (wy - 76) / 48) * 0.3; if (dith(dx, wy * K, t)) PX(dx, wy * K, "rgba(120,170,210,0.35)"); }
+  } else if (type === "taipei") {
+    // AI 工具整合:白晝台北(藍天雲、遠山、101、密集城市)
+    grad(0, 66, [[0, "#4f9fe0"], [0.55, "#95c8ee"], [0.9, "#d6ebf7"], [1, "#eef5fb"]]);
+    for (const [cx, cy] of [[54, 12], [128, 20], [176, 10]] as number[][]) ([[0, 0, 10, 3], [3, -2, 6, 2], [-3, 1, 5, 2]] as number[][]).forEach(([ox, oy, w, h]) => R(cx + ox, cy + oy, w, h, "#f6fafd"));
+    ridge(50, 68, "#7fa890", 5, 3, 0.2); // 遠山(較亮)
+    ridge(58, 68, "#5f8a72", 4, 2, 1.4); // 近山
+    skyline(78, 10, 26, "#8a94a0", false); // 遠樓
+    skyline(106, 16, 44, "#7d8791", true); // 密集城市(亮窗改暖白)
+    R(0, 106, W, H, "#3a3f45"); R(0, 106, W, 2, "#4a4f55"); for (let x = 0; x < W; x += 14) R(x, 114, 7, 2, "#d8d2b8"); // 街道
     if (!bg) {
-      for (let dy = 74 * K; dy < DH; dy++) { const t = (1 - (dy / K - 74) / 50) * 0.7; for (let dx = 64 * K; dx < 76 * K; dx++) if (dith(dx, dy, t)) PX(dx, dy, "rgba(255,215,140,0.55)"); }
-      R(120, 70, 10, 4, "#0c1a12"); R(124, 66, 1, 5, "#0c1a12"); for (let x = 150; x < 200; x++) { const c = (64 - (x - 150) * 0.2) | 0; R(x, c, 1, 72 - c, "#0a1a10"); }
+      disc(30, 16, 6, "#fff6d8", 9); // 太陽
+      const tx = 128; // 台北 101
+      R(tx - 1, 12, 2, 12, "#9fb8b2"); R(tx - 6, 24, 12, 4, "#7fa199");
+      for (let s = 0; s < 8; s++) { const y = 28 + s * 8; R(tx - 8, y, 16, 8, "#6f9e94"); R(tx - 9, y, 18, 2, "#8fbcb1"); R(tx - 8, y + 7, 16, 1, "#4d7168"); }
+      R(tx - 13, 92, 26, 14, "#5c7f77"); R(tx - 13, 92, 26, 1, "#7fa199");
+      for (let dy = 30 * K; dy < 91 * K; dy += 2) for (let dx = (tx - 6) * K; dx < (tx + 6) * K; dx += 3) if ((dx + dy) % 4 < 2) PX(dx, dy, "rgba(232,246,243,0.25)");
+    }
+  } else if (type === "field") {
+    // 技能:田野黃昏(golden hour,遠山、稻田倒影、農舍、孤樹)
+    grad(0, 78, [[0, "#3a5c8c"], [0.3, "#e88a3a"], [0.55, "#f4c66a"], [0.66, "#5a4a26"], [0.68, "#2c3c1e"], [1, "#16240f"]]);
+    for (let i = 0; i < 3; i++) { const bx = 20 + ((rnd() * 170) | 0); R(bx, 14 + ((rnd() * 8) | 0), 3, 1, "#1a2416"); R(bx + 2, 14, 3, 1, "#1a2416"); } // 遠鳥
+    ridge(52, 66, "#3a4a2c", 6, 3, 0.3); // 遠山
+    ridge(62, 78, "#243018", 4, 2, 1.1); // 近山
+    R(0, 78, W, H, "#16210f"); // 稻田
+    for (let ry = 82; ry < H; ry += 5) for (let dx = 0; dx < DW; dx++) { const t = (1 - (ry - 82) / (H - 82)) * 0.42; if (dith(dx, ry * K, t)) PX(dx, ry * K, "rgba(244,180,96,0.45)"); } // 田水映天光
+    for (let ry = 84; ry < H; ry += 6) R(0, ry, W, 1, "rgba(20,30,12,0.5)"); // 田埂線
+    for (let i = 0; i < 7; i++) R(14 + i * 27 + ((rnd() * 8) | 0), 56 + ((rnd() * 4) | 0), 1, 1, "#ffd27a"); // 零星燈火
+    if (!bg) {
+      disc(150, 42, 9, "#ffe6b0", 8); // 低空夕陽
+      R(96, 66, 3, 12, "#0e160a"); R(93, 60, 9, 8, "#0c1408"); // 孤樹
+      R(150, 66, 12, 8, "#0e160a"); R(151, 62, 10, 4, "#0c1408"); R(154, 64, 2, 2, "#ffcf7a"); // 農舍(亮窗)
+    }
+  } else if (type === "sea") {
+    // 終點:南迴海景・破曉(靛→桃→橘,日出、倒影柱、海浪、岬角、小船)
+    grad(0, 72, [[0, "#141f3e"], [0.3, "#7a3450"], [0.48, "#d2603e"], [0.6, "#f0985a"], [0.66, "#f6cf94"], [0.7, "#0c2338"], [1, "#06121f"]]);
+    stars(14, 22);
+    ridge(58, 72, "#0e2436", 3, 2, 0.8); // 遠方海岸線
+    R(0, 72, W, H, "#0a1c2e"); // 海面
+    waves(74, "rgba(130,175,215,0.34)", 0.32);
+    if (!bg) {
+      disc(96, 46, 9, "#ffe9c2", 11); // 破曉的太陽
+      reflectCol(96, 72, "rgba(255,214,140,0.6)", 0.7); // 陽光倒影柱
+      for (let x = 158; x < 200; x++) { const c = (58 - (x - 158) * 0.28) | 0; R(x, c, 1, 72 - c, "#08161f"); } // 岬角
+      R(60, 68, 10, 4, "#0a1620"); R(64, 64, 1, 5, "#0a1620"); // 小船
+      for (const [bx, by] of [[40, 30], [120, 24], [150, 34]] as number[][]) { R(bx, by, 3, 1, "#1a2a3a"); R(bx + 2, by, 3, 1, "#1a2a3a"); } // 海鳥
     }
   }
 }
