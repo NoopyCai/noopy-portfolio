@@ -56,10 +56,10 @@ export function ScrollJourney({ soundOn }: { soundOn: boolean }) {
       <div
         ref={stage}
         className="stage"
-        style={{ height: "100vh", width: "100%", overflow: "hidden", display: "grid", placeItems: "center", background: "var(--bg)" }}
+        style={{ position: "relative", height: "100vh", width: "100%", overflow: "hidden", display: "grid", placeItems: "center", background: "var(--bg)" }}
       >
         {phase === "boot" && (
-          <div style={{ width: "92%", maxWidth: 1180 }}>
+          <div style={{ width: "max(100vw, 177.78vh)", aspectRatio: "16 / 9" }}>
             <WireCar fill={fillAmount(p)} />
           </div>
         )}

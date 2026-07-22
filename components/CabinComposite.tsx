@@ -7,7 +7,7 @@ import type { SceneType, Grade } from "@/content/stations";
 // 靜態車廂圖 + 三扇 live 車窗(idx0 中央=完整,其餘 bg)+ LED 覆蓋 + 燈光分級 overlay。
 export function CabinComposite({ scene, grade, ledText }: { scene: SceneType; grade: Grade; ledText: string }) {
   return (
-    <div style={{ position: "relative", width: "100%", maxWidth: 1180, margin: "0 auto", lineHeight: 0 }}>
+    <div style={{ position: "relative", width: "max(100vw, 177.68vh)", lineHeight: 0 }}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src="/cabin.jpg"
