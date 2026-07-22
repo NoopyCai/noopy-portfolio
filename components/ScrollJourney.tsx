@@ -76,7 +76,7 @@ export function ScrollJourney({ soundOn }: { soundOn: boolean }) {
         )}
         {phase === "ride" && (
           <>
-            <CabinComposite scene={cur.scene} grade={grade} ledText={t(cur.led)} />
+            <CabinComposite scene={cur.scene} grade={grade} ledText={t(cur.led)} pan={x} />
             <StationPanel station={cur} visible={dist < 0.34} />
           </>
         )}

@@ -5,7 +5,7 @@ import { LedSign } from "./LedSign";
 import type { SceneType, Grade } from "@/content/stations";
 
 // 靜態車廂圖 + 三扇 live 車窗(idx0 中央=完整,其餘 bg)+ LED 覆蓋 + 燈光分級 overlay。
-export function CabinComposite({ scene, grade, ledText }: { scene: SceneType; grade: Grade; ledText: string }) {
+export function CabinComposite({ scene, grade, ledText, pan }: { scene: SceneType; grade: Grade; ledText: string; pan: number }) {
   return (
     <div style={{ position: "relative", width: "max(100vw, 177.68vh)", lineHeight: 0 }}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -18,7 +18,7 @@ export function CabinComposite({ scene, grade, ledText }: { scene: SceneType; gr
         style={{ position: "absolute", inset: 0, pointerEvents: "none", background: grade.grade, mixBlendMode: grade.blend as React.CSSProperties["mixBlendMode"], transition: "background .8s ease" }}
       />
       {WIN.map((r, i) => (
-        <Window key={i} scene={scene} rect={r} bg={i !== 0} />
+        <Window key={i} scene={scene} rect={r} bg={i !== 0} pan={pan} />
       ))}
       <div style={{ position: "absolute", left: `${LED_RECT.left}%`, top: `${LED_RECT.top}%`, width: `${LED_RECT.w}%`, height: `${LED_RECT.h}%` }}>
         <LedSign text={ledText} />

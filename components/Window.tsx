@@ -5,15 +5,30 @@ import type { SceneType } from "@/content/stations";
 
 type Rect = { left: number; top: number; w: number; h: number; r: string; pos: string };
 
+const PAN_LOOPS = 1; // 每站約平移一圈(地標經過一次)
+
 let uid = 0;
 
-// 單一車窗:換站時新場景 crossfade 淡入、舊場景淡出(平滑過渡)。
-export function Window({ scene, rect, bg }: { scene: SceneType; rect: Rect; bg: boolean }) {
+// 從 3×寬長條 [bg | full(含地標) | bg] 取一個 window 寬的切片,隨 pan 環繞平移 → 行駛感,且地標不重複。
+function blit(c: HTMLCanvasElement | null, strip: HTMLCanvasElement | null, pan: number) {
+  if (!c || !strip) return;
+  const SW = strip.width, H = strip.height, W = Math.round(SW / 3);
+  if (c.width !== W) c.width = W;
+  if (c.height !== H) c.height = H;
+  const g = c.getContext("2d")!;
+  g.imageSmoothingEnabled = false;
+  const off = ((((pan * PAN_LOOPS) % 1) + 1) % 1) * SW;
+  g.clearRect(0, 0, W, H);
+  g.drawImage(strip, -off, 0);
+  g.drawImage(strip, SW - off, 0);
+}
+
+// 單一車窗:換站 crossfade + 窗景隨捲動水平流動。
+export function Window({ scene, rect, bg, pan }: { scene: SceneType; rect: Rect; bg: boolean; pan: number }) {
   const [layers, setLayers] = useState<{ id: number; scene: SceneType; on: boolean }[]>(() => [
     { id: uid++, scene, on: true },
   ]);
 
-  // 場景改變 → 疊一層新場景(初始 opacity 0)
   useEffect(() => {
     setLayers((prev) => {
       const top = prev[prev.length - 1];
@@ -22,7 +37,6 @@ export function Window({ scene, rect, bg }: { scene: SceneType; rect: Rect; bg: 
     });
   }, [scene]);
 
-  // 新層掛載後下一幀翻成 on(觸發淡入),過渡結束移除舊層
   useEffect(() => {
     const pending = layers.find((l) => !l.on);
     if (!pending) return;
@@ -49,17 +63,40 @@ export function Window({ scene, rect, bg }: { scene: SceneType; rect: Rect; bg: 
       }}
     >
       {layers.map((l) => (
-        <SceneLayer key={l.id} scene={l.scene} bg={bg} pos={rect.pos} on={l.on} />
+        <SceneLayer key={l.id} scene={l.scene} bg={bg} pos={rect.pos} on={l.on} pan={pan} />
       ))}
     </div>
   );
 }
 
-function SceneLayer({ scene, bg, pos, on }: { scene: SceneType; bg: boolean; pos: string; on: boolean }) {
+function SceneLayer({ scene, bg, pos, on, pan }: { scene: SceneType; bg: boolean; pos: string; on: boolean; pan: number }) {
   const ref = useRef<HTMLCanvasElement>(null);
+  const buf = useRef<HTMLCanvasElement | null>(null);
   useEffect(() => {
-    if (ref.current) drawScene(ref.current, scene, { bg });
+    const full = document.createElement("canvas");
+    drawScene(full, scene, { bg });
+    const W = full.width, H = full.height;
+    // 背景層(無地標):中央窗用它當左右兩段,讓地標只在中段出現一次
+    let bgc: HTMLCanvasElement = full;
+    if (!bg) {
+      bgc = document.createElement("canvas");
+      drawScene(bgc, scene, { bg: true });
+    }
+    const strip = document.createElement("canvas");
+    strip.width = W * 3;
+    strip.height = H;
+    const sg = strip.getContext("2d")!;
+    sg.imageSmoothingEnabled = false;
+    sg.drawImage(bgc, 0, 0);
+    sg.drawImage(full, W, 0);
+    sg.drawImage(bgc, W * 2, 0);
+    buf.current = strip;
+    blit(ref.current, strip, pan);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scene, bg]);
+  useEffect(() => {
+    blit(ref.current, buf.current, pan);
+  }, [pan]);
   return (
     <canvas
       ref={ref}
