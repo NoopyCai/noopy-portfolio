@@ -1,16 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { fillAmount, phaseOf, rideProgress, stationAt, lerpGrade } from "./progress";
+import { phaseOf, rideProgress, stationAt, lerpGrade } from "./progress";
 import type { Grade } from "@/content/stations";
 
 describe("progress", () => {
-  it("fillAmount ramps 0→1 across boot", () => {
-    expect(fillAmount(0)).toBe(0);
-    expect(fillAmount(0.05)).toBeCloseTo(0.5, 1);
-    expect(fillAmount(0.1)).toBe(1);
-    expect(fillAmount(0.5)).toBe(1);
-  });
-  it("phaseOf splits boot/gate/ride", () => {
-    expect(phaseOf(0.05)).toBe("boot");
+  it("phaseOf: gate is the entry phase (boot removed), ride after gateEnd", () => {
+    expect(phaseOf(0)).toBe("gate");
     expect(phaseOf(0.13)).toBe("gate");
     expect(phaseOf(0.9)).toBe("ride");
   });
