@@ -9,6 +9,7 @@ export type StationId =
   | "skills"
   | "terminal";
 export type Grade = { filter: string; grade: string; blend: string };
+export type Link = { label: string; href: string };
 export type PanelData = {
   kind: "hero" | "project" | "skills" | "contact";
   title: Bi;
@@ -19,6 +20,12 @@ export type PanelData = {
   link?: string;
   skills?: { group: Bi; items: string[] }[];
   contacts?: { label: string; href: string }[];
+  // ── 作品站延伸欄位 ──
+  year?: string; // 年份(時刻表感)
+  role?: Bi; // 你的角色(獨立/團隊)
+  impact?: Bi; // 到站廣播主句:一句話關鍵成果
+  links?: Link[]; // 專案連結(repo / demo / case)
+  detail?: { problem: Bi; approach: Bi; result: Bi }; // 「看細節」展開層
 };
 export type Station = {
   id: StationId;
@@ -69,6 +76,16 @@ export const STATIONS: Station[] = [
         { n: "Top20", label: { zh: "分類熱銷", en: "per category" } },
         { n: "RT", label: { zh: "即時個人化", en: "real-time" } },
       ],
+      year: "2024", // TODO: 確認實際年份
+      role: { zh: "獨立開發", en: "Solo build" },
+      impact: { zh: "3 種推薦策略 × 即時個人化,訂單分析到上線一條龍", en: "3 strategies × real-time personalization, analytics-to-serving end to end" },
+      // TODO: 有可公開的成效數字(如點擊率/轉換提升)時,補進 impact 更有力
+      // links: [{ label: "Demo", href: "…" }],  // TODO: 有可公開連結再補
+      detail: {
+        problem: { zh: "電商想提升轉換,卻缺乏個人化推薦與自動化資料流。", en: "E-commerce needed higher conversion but lacked personalized recommendations and an automated data pipeline." },
+        approach: { zh: "用 BigQuery ML 建 Top Sale 熱銷與 I2I 隱式矩陣分解相似商品,搭 Cloud Pub/Sub → BigQuery → Redis 自動化管線,對外提供即時推薦 API。", en: "Built top-sellers and I2I implicit matrix factorization on BigQuery ML, with a Cloud Pub/Sub → BigQuery → Redis pipeline and a real-time recommendation API." },
+        result: { zh: "三種推薦策略上線:分類熱銷 Top20 + 即時個人化,從訂單分析到服務串接一條龍完成。", en: "Shipped three strategies — per-category top-20 plus real-time personalization — end to end from order analytics to live serving." },
+      },
     },
   },
   {
@@ -90,6 +107,15 @@ export const STATIONS: Station[] = [
         { n: "AES-256", label: { zh: "時效登入", en: "auto-login" } },
         { n: "OTP", label: { zh: "Email 驗證", en: "email verify" } },
       ],
+      year: "2024", // TODO: 確認實際年份
+      role: { zh: "獨立開發", en: "Solo build" },
+      impact: { zh: "社群帳號 × 電商會員無縫綁定,一鍵時效自動登入", en: "Seamless LINE↔member binding with one-tap timed auto-login" },
+      // links: [{ label: "Demo", href: "…" }],  // TODO: 有可公開連結再補
+      detail: {
+        problem: { zh: "LINE 社群流量與 Magento2 電商會員各自獨立,難以整合行銷與登入。", en: "LINE social traffic and Magento2 members were siloed, blocking unified marketing and login." },
+        approach: { zh: "以 Vue3+Vite LIFF SPA 串接 LINE 與 Magento2,GCF Serverless API、AES-256 時效登入 Token、Email OTP,並設計業務員 QR 邀請導流。", en: "Bridged LINE and Magento2 with a Vue3+Vite LIFF SPA, GCF serverless API, AES-256 timed tokens, Email OTP, and a sales-rep QR invite funnel." },
+        result: { zh: "社群帳號與電商會員無縫綁定,支援一鍵時效自動登入;業務可用 QR 直接導客綁定。", en: "Seamless member binding with one-tap timed auto-login; sales reps onboard customers via QR." },
+      },
     },
   },
   {
@@ -108,6 +134,14 @@ export const STATIONS: Station[] = [
       },
       tags: ["Claude Code", "Gemini", "Node.js", "GCP", "SDD"],
       metrics: [{ n: "80%", label: { zh: "省手刻時間", en: "less hand-coding" } }],
+      year: "2025", // TODO: 確認實際年份
+      role: { zh: "獨立開發", en: "Solo build" },
+      impact: { zh: "把 AI 導入工作流,內容產製省約 8 成手刻時間", en: "Brought AI into the workflow — ~80% less hand-coding" },
+      detail: {
+        problem: { zh: "週報、Blog 內容與商品資料整理耗費大量重複人工。", en: "Weekly reports, blog content, and product data all cost heavy repetitive manual work." },
+        approach: { zh: "用 Gemini / Claude Code 建三套工具:AI 週報(RSS→摘要→PDF→Google Chat)、Blog 內容工具(Doc→HTML + 圖片 ALT 生成)、商品資料 JSONL 匯出供檢索。", en: "Built three tools with Gemini / Claude Code: an AI weekly report (RSS→summary→PDF→Google Chat), a blog content tool (Doc→HTML + ALT generation), and JSONL product export for retrieval." },
+        result: { zh: "內容產製省約 8 成手刻時間,週報自動摘要並定時推送。", en: "~80% less hand-coding in content production, with automated summarized weekly reports on schedule." },
+      },
     },
   },
   {

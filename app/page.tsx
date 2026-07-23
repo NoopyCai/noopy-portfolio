@@ -7,7 +7,7 @@ import { TopBar } from "@/components/TopBar";
 
 export default function Home() {
   const [reduce, setReduce] = useState(false);
-  const [soundOn, setSoundOn] = useState(false);
+  const [soundOn, setSoundOn] = useState(true);
   useEffect(() => {
     setReduce(matchMedia("(prefers-reduced-motion: reduce)").matches);
   }, []);
