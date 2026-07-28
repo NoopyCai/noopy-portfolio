@@ -1,17 +1,19 @@
 import type { Grade } from "@/content/stations";
 
-export const PHASE = { bootEnd: 0, gateEnd: 0.16 } as const;
+// gate(開始乘車)→ ride(六站)→ exit(到站起身轉身,交棒給出站大廳)
+export const PHASE = { gateEnd: 0.13, rideEnd: 0.8 } as const;
 export const clamp = (v: number, a = 0, b = 1) => Math.max(a, Math.min(b, v));
 export const smooth = (t: number) => t * t * (3 - 2 * t);
 
-export function fillAmount(p: number) {
-  return smooth(clamp(p / PHASE.bootEnd));
-}
-export function phaseOf(p: number): "boot" | "gate" | "ride" {
-  return p < PHASE.bootEnd ? "boot" : p < PHASE.gateEnd ? "gate" : "ride";
+export function phaseOf(p: number): "gate" | "ride" | "exit" {
+  return p < PHASE.gateEnd ? "gate" : p < PHASE.rideEnd ? "ride" : "exit";
 }
 export function rideProgress(p: number) {
-  return clamp((p - PHASE.gateEnd) / (1 - PHASE.gateEnd));
+  return clamp((p - PHASE.gateEnd) / (PHASE.rideEnd - PHASE.gateEnd));
+}
+// exit 段進度 0→1(到站相機動畫:起身 + 轉身)
+export function exitProgress(p: number) {
+  return clamp((p - PHASE.rideEnd) / (1 - PHASE.rideEnd));
 }
 export function stationAt(rp: number, n: number) {
   const x = clamp(rp) * (n - 1);

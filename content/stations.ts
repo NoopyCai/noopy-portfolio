@@ -176,10 +176,9 @@ export const STATIONS: Station[] = [
         en: "Open to remote; based around Taipei. Happy to chat about frontend / full-stack roles.",
       },
       contacts: [
-        { label: "Email", href: "mailto:noopycai@mrliving.com.tw" },
-        // TODO(Task 14): 換成真實 GitHub / LinkedIn 網址
-        { label: "GitHub", href: "https://github.com/" },
-        { label: "LinkedIn", href: "https://www.linkedin.com/" },
+        { label: "popparty3310@gmail.com", href: "mailto:popparty3310@gmail.com" },
+        { label: "GitHub", href: "https://github.com/NoopyCai" },
+        { label: "LinkedIn", href: "https://www.linkedin.com/in/noopy-cai-b1495737a" },
       ],
       link: "/resume/Noopy_resume2026.pdf",
     },

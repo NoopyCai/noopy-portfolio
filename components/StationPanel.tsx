@@ -22,61 +22,60 @@ export function StationPanel({ station, visible }: { station: Station; visible: 
   };
   return (
     <>
+      {/* 版面全部在 CSS(.sp-*):桌機浮出左下、手機改成靠左閱讀的資訊看板,見 globals.css */}
       <div className="glasscard station-panel" style={style}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{ fontFamily: "var(--font-led)", color: "var(--amber)", letterSpacing: ".2em", fontSize: 12 }}>{t(station.name)}</span>
+        <div className="sp-head">
+          <span className="sp-station">{t(station.name)}</span>
           {(p.year || p.role) && (
-            <span style={{ fontFamily: "var(--font-led)", color: "var(--muted)", fontSize: 11 }}>
-              {[p.year, p.role && t(p.role)].filter(Boolean).join(" · ")}
-            </span>
+            <span className="sp-meta">{[p.year, p.role && t(p.role)].filter(Boolean).join(" · ")}</span>
           )}
         </div>
-        <h2 style={{ margin: "4px 0 8px", fontSize: "clamp(20px,3vw,34px)", textWrap: "balance" }}>{t(p.title)}</h2>
-        {p.subtitle && <div style={{ fontFamily: "var(--font-led)", color: "var(--muted)", fontSize: 13, marginBottom: 10 }}>{t(p.subtitle)}</div>}
+        <h2>{t(p.title)}</h2>
+        {p.subtitle && <div className="sp-sub">{t(p.subtitle)}</div>}
         {p.impact && <p className="impact">▸ {t(p.impact)}</p>}
-        {p.body && <p style={{ lineHeight: 1.75, fontSize: 15 }}>{t(p.body)}</p>}
+        {p.body && <p className="sp-body">{t(p.body)}</p>}
         {p.tags && (
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, margin: "10px 0" }}>
+          <div className="sp-tags">
             {p.tags.map((x) => (
-              <span key={x} style={{ fontFamily: "var(--font-led)", fontSize: 11, color: "var(--green)", border: "1px solid rgba(6,255,49,.4)", borderRadius: 999, padding: "4px 10px" }}>{x}</span>
+              <span key={x} className="sp-tag">{x}</span>
             ))}
           </div>
         )}
         {p.metrics && (
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 20, rowGap: 10, margin: "8px 0" }}>
+          <div className="sp-metrics">
             {p.metrics.map((m, i) => (
               <div key={i}>
-                <div style={{ fontFamily: "var(--font-led)", fontWeight: 700, fontSize: 24, color: "var(--amber)" }}>{m.n}</div>
-                <div style={{ fontSize: 11, color: "var(--muted)" }}>{t(m.label)}</div>
+                <div className="sp-metric-n">{m.n}</div>
+                <div className="sp-metric-l">{t(m.label)}</div>
               </div>
             ))}
           </div>
         )}
         {p.skills && (
-          <div style={{ display: "grid", gap: 8 }}>
+          <div className="sp-skills">
             {p.skills.map((g, i) => (
-              <div key={i}><b style={{ color: "var(--emu-green)" }}>{t(g.group)}</b>：{g.items.join("、")}</div>
+              <div key={i}><b>{t(g.group)}</b>：{g.items.join("、")}</div>
             ))}
           </div>
         )}
         {p.contacts && (
-          <div style={{ display: "flex", gap: 14, margin: "10px 0", flexWrap: "wrap" }}>
+          <div className="sp-contacts">
             {p.contacts.map((c) => (
               <a key={c.label} href={c.href} rel="noopener" target="_blank">{c.label}</a>
             ))}
           </div>
         )}
-        <div style={{ display: "flex", gap: 16, alignItems: "center", marginTop: 8, flexWrap: "wrap" }}>
+        <div className="sp-actions">
           {p.detail && (
             <button type="button" className="detail-btn" onClick={() => setOpen(true)}>
               {t({ zh: "看細節", en: "Details" })} ▾
             </button>
           )}
           {p.links?.map((l) => (
-            <a key={l.href} href={l.href} target="_blank" rel="noopener" style={{ fontFamily: "var(--font-led)", fontSize: 12 }}>{l.label} ↗</a>
+            <a key={l.href} href={l.href} target="_blank" rel="noopener" className="sp-link">{l.label} ↗</a>
           ))}
           {p.link && (
-            <a href={p.link} target="_blank" rel="noopener" style={{ fontFamily: "var(--font-led)", color: "var(--green)" }}>
+            <a href={p.link} target="_blank" rel="noopener" className="sp-link sp-link-cta">
               {t({ zh: "下載履歷 PDF", en: "Résumé PDF" })} ▸
             </a>
           )}
@@ -102,9 +101,9 @@ export function StationPanel({ station, visible }: { station: Station; visible: 
               </div>
             ))}
             {p.tags && (
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 14 }}>
+              <div className="sp-tags" style={{ marginTop: 14 }}>
                 {p.tags.map((x) => (
-                  <span key={x} style={{ fontFamily: "var(--font-led)", fontSize: 11, color: "var(--green)", border: "1px solid rgba(6,255,49,.4)", borderRadius: 999, padding: "3px 9px" }}>{x}</span>
+                  <span key={x} className="sp-tag">{x}</span>
                 ))}
               </div>
             )}

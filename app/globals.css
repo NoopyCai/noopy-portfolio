@@ -125,8 +125,42 @@ a { color: var(--green); }
 @keyframes pulse { 50% { text-shadow: 0 0 20px rgba(6, 255, 49, 1), 0 0 44px rgba(6, 255, 49, .7); } }
 @media (prefers-reduced-motion: reduce) { .start { animation: none; } }
 
+/* 到站轉場 → 出站大廳 */
+.concourse-intro { position: absolute; inset: 0; z-index: 5; display: grid; justify-items: center; align-content: start; padding-top: 8vh; background: var(--bg); }
+.concourse-intro-inner { max-width: 760px; width: 100%; padding: 0 24px; }
+.concourse { background: var(--bg); color: var(--text); min-height: 100vh; padding: 8vh 24px 44px; }
+.concourse-inner { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 40px; }
+.concourse-hero { text-align: center; }
+.concourse-hero .eyebrow { font-family: var(--font-led); font-size: clamp(18px, 3vw, 26px); font-weight: 400; letter-spacing: .3em; color: var(--green); margin: 0 0 10px; }
+.concourse-hero p { color: var(--muted); font-family: var(--font-led); letter-spacing: .06em; margin: 0; }
+.concourse-block h3 { font-family: var(--font-led); font-size: 13px; letter-spacing: .18em; color: var(--amber); margin: 0 0 12px; }
+.concourse-block p { line-height: 1.85; margin: 0 0 12px; color: #cfd8e4; }
+.concourse-links { display: flex; flex-wrap: wrap; gap: 12px; }
+.concourse-link { font-family: var(--font-led); font-size: 14px; color: var(--text); text-decoration: none; border: 1px solid rgba(110, 180, 63, .4); border-radius: 999px; padding: 9px 16px; transition: border-color .2s, color .2s, box-shadow .2s; }
+.concourse-link:hover { border-color: var(--green); color: var(--green); box-shadow: 0 0 12px rgba(6, 255, 49, .25); }
+.concourse-footer { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; border-top: 1px solid var(--line); padding-top: 20px; color: var(--muted); font-family: var(--font-led); font-size: 12px; }
+
+/* 站點資訊面板內部排版(桌機基準;手機在下方 RWD 區重排) */
+.sp-head { display: flex; align-items: center; gap: 10px; }
+.sp-station { font-family: var(--font-led); color: var(--amber); letter-spacing: .2em; font-size: 12px; }
+.sp-meta { font-family: var(--font-led); color: var(--muted); font-size: 11px; }
+.station-panel h2 { margin: 4px 0 8px; font-size: clamp(20px, 3vw, 34px); text-wrap: balance; }
+.sp-sub { font-family: var(--font-led); color: var(--muted); font-size: 13px; margin-bottom: 10px; }
+.sp-body { font-size: 15px; line-height: 1.75; margin: 15px 0; }
+.sp-tags { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+.sp-tag { font-family: var(--font-led); font-size: 11px; color: var(--green); border: 1px solid rgba(6, 255, 49, .4); border-radius: 999px; padding: 4px 10px; }
+.sp-metrics { display: flex; flex-wrap: wrap; gap: 20px; row-gap: 10px; margin: 8px 0; }
+.sp-metric-n { font-family: var(--font-led); font-weight: 700; font-size: 24px; color: var(--amber); }
+.sp-metric-l { font-size: 11px; color: var(--muted); }
+.sp-skills { display: grid; gap: 8px; }
+.sp-skills b { color: var(--emu-green); }
+.sp-contacts { display: flex; flex-wrap: wrap; gap: 14px; margin: 10px 0; }
+.sp-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; margin-top: 8px; }
+.sp-link { font-family: var(--font-led); font-size: 12px; }
+.sp-link-cta { color: var(--green); }
+
 /* ─────────── RWD ─────────── */
-/* 作品資訊面板定位(桌機:左下浮出;窄螢幕:底部整寬可讀面板) */
+/* 作品資訊面板定位(桌機:左下浮出;手機:畫面正中央的資訊看板) */
 .station-panel { position: absolute; left: 6%; bottom: 8%; max-width: 42%; color: var(--text); }
 
 /* 平板 / 直式 */
@@ -135,17 +169,39 @@ a { color: var(--green); }
   .routemap { right: 12px; gap: 16px; }
 }
 
-/* 手機(直式為主):面板改底部整寬玻璃卡、路線圖收起文字標籤 */
+/* 手機(直式為主):面板擺畫面正中央、路線圖收起文字標籤 */
 @media (max-width: 640px) {
+  /* 垂直居中用 top/bottom:0 + height:fit-content + margin:auto —— 不用 transform,
+     transform 已被元件的淡入 inline style 佔用。左右 28px 讓開路線圖圓點。 */
   .station-panel {
-    left: 12px; right: 12px; bottom: 12px; max-width: none;
-    padding: 15px 15px 17px; border-radius: 18px;
-    text-align: center; /* 手機版內容置中 */
+    left: 22px; right: 22px; top: 0; bottom: 0; max-width: none;
+    height: fit-content; margin: auto 0;
+    max-height: 84vh; overflow-y: auto; /* 極長內容的保險 */
+    padding: 19px 18px 21px; border-radius: 22px;
+    text-align: left; /* 段落靠左才讀得動(置中的內文兩邊都是鋸齒) */
+    background: rgba(10, 16, 20, .66); /* 直式時卡片壓在亮窗景上,底要更實才有對比 */
   }
-  .station-panel > div { justify-content: center; } /* 站名列/標籤/數據/按鈕列置中 */
-  .station-panel h2 { font-size: clamp(19px, 6vw, 26px) !important; margin: 3px 0 6px !important; }
-  .station-panel p { font-size: 13.5px !important; line-height: 1.65 !important; }
-  .impact { font-size: 13px; }
+  /* 站名列 = 看板抬頭:細線收邊,和內容分層 */
+  .sp-head { gap: 8px; padding-bottom: 9px; border-bottom: 1px solid var(--line); }
+  .sp-station { font-size: 11px; letter-spacing: .16em; }
+  .station-panel h2 { font-size: 23px; line-height: 1.3; margin: 12px 0 3px; }
+  .sp-sub { font-size: 12px; letter-spacing: .03em; margin-bottom: 13px; }
+  /* impact = 到站廣播:左側琥珀軸線 + 微弱漸層底,一眼看到重點句 */
+  .station-panel .impact {
+    font-size: 13.5px; line-height: 1.6; margin: 0 0 13px;
+    padding: 7px 0 7px 11px; border-left: 2px solid rgba(242, 194, 48, .75);
+    background: linear-gradient(90deg, rgba(242, 194, 48, .10), transparent 72%);
+  }
+  .sp-body { font-size: 14.5px; line-height: 1.8; margin: 0 0 14px; color: #cfd8e4; }
+  .sp-tags { gap: 6px; margin: 0 0 13px; }
+  .sp-tag { font-size: 10.5px; padding: 3px 9px; }
+  /* 數據列:上細線分隔,和上面的敘述斷開 */
+  .sp-metrics { gap: 24px; row-gap: 12px; margin: 0; padding-top: 12px; border-top: 1px solid var(--line); }
+  .sp-metric-n { font-size: 21px; }
+  .sp-skills { gap: 11px; font-size: 14px; line-height: 1.65; }
+  .sp-contacts { flex-direction: column; align-items: flex-start; gap: 11px; margin: 13px 0 0; font-size: 14px; }
+  .sp-actions { gap: 12px; margin-top: 15px; }
+  .detail-btn { padding: 11px 18px; } /* 拉到 ~44px 觸控高度 */
   .routemap { right: 8px; gap: 13px; }
   .routemap-dot { width: 10px; height: 10px; }
   .routemap-label { display: none; } /* 手機收起站名,保留可點的進度點 */
@@ -157,6 +213,6 @@ a { color: var(--green); }
 /* 橫式手機(矮螢幕):面板縮小、避免蓋住車窗過多 */
 @media (max-height: 480px) and (orientation: landscape) {
   .station-panel { bottom: 8px; left: 12px; max-width: 46%; padding: 10px 13px; }
-  .station-panel p { display: none; } /* 矮螢幕省略長描述,保留標題/impact/標籤 */
+  .station-panel .sp-body { display: none; } /* 矮螢幕省略長描述,保留標題/impact/標籤 */
   .routemap { gap: 11px; }
 }

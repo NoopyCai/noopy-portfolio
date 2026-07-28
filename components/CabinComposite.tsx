@@ -7,6 +7,7 @@ import type { SceneType, Grade } from "@/content/stations";
 // 靜態車廂圖 + 三扇 live 車窗(idx0 中央=完整,其餘 bg)+ LED 覆蓋 + 燈光分級 overlay。
 export function CabinComposite({ scene, grade, ledText, pan }: { scene: SceneType; grade: Grade; ledText: string; pan: number }) {
   return (
+    // cover:任何比例都填滿畫面(寬螢幕吃 100vw、直式吃 177.68vh)。不要加上限 —— 加了直式就會出現上下留邊。
     <div style={{ position: "relative", width: "max(100vw, 177.68vh)", lineHeight: 0 }}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
