@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useLang } from "./LangProvider";
+import { Icon } from "./Icon";
 import type { Station } from "@/content/stations";
 
 // 站點內容面板(ride 疊層):依 panel.kind 渲染雙語內容,visible 控制淡入。
@@ -32,7 +33,7 @@ export function StationPanel({ station, visible }: { station: Station; visible: 
         </div>
         <h2>{t(p.title)}</h2>
         {p.subtitle && <div className="sp-sub">{t(p.subtitle)}</div>}
-        {p.impact && <p className="impact">▸ {t(p.impact)}</p>}
+        {p.impact && <p className="impact"><Icon name="play" /> {t(p.impact)}</p>}
         {p.body && <p className="sp-body">{t(p.body)}</p>}
         {p.tags && (
           <div className="sp-tags">
@@ -68,15 +69,15 @@ export function StationPanel({ station, visible }: { station: Station; visible: 
         <div className="sp-actions">
           {p.detail && (
             <button type="button" className="detail-btn" onClick={() => setOpen(true)}>
-              {t({ zh: "看細節", en: "Details" })} ▾
+              {t({ zh: "看細節", en: "Details" })} <Icon name="chevron" />
             </button>
           )}
           {p.links?.map((l) => (
-            <a key={l.href} href={l.href} target="_blank" rel="noopener" className="sp-link">{l.label} ↗</a>
+            <a key={l.href} href={l.href} target="_blank" rel="noopener" className="sp-link">{l.label} <Icon name="external" /></a>
           ))}
           {p.link && (
             <a href={p.link} target="_blank" rel="noopener" className="sp-link sp-link-cta">
-              {t({ zh: "下載履歷 PDF", en: "Résumé PDF" })} ▸
+              {t({ zh: "下載履歷 PDF", en: "Résumé PDF" })} <Icon name="play" />
             </a>
           )}
         </div>
@@ -85,7 +86,7 @@ export function StationPanel({ station, visible }: { station: Station; visible: 
       {open && p.detail && (
         <div className="detail-modal" role="dialog" aria-modal="true" onClick={() => setOpen(false)}>
           <div className="detail-card" onClick={(e) => e.stopPropagation()}>
-            <button type="button" className="detail-close" onClick={() => setOpen(false)} aria-label={t({ zh: "關閉", en: "Close" })}>✕</button>
+            <button type="button" className="detail-close" onClick={() => setOpen(false)} aria-label={t({ zh: "關閉", en: "Close" })}><Icon name="close" size={14} /></button>
             <div style={{ fontFamily: "var(--font-led)", color: "var(--amber)", letterSpacing: ".2em", fontSize: 12 }}>
               {t(station.name)}{p.year ? ` · ${p.year}` : ""}{p.role ? ` · ${t(p.role)}` : ""}
             </div>

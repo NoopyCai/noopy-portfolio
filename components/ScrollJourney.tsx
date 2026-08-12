@@ -8,6 +8,7 @@ import { CabinComposite } from "./CabinComposite";
 import { StationPanel } from "./StationPanel";
 import { RouteMap } from "./RouteMap";
 import { ConcourseHero } from "./Concourse";
+import { startSoundtrack } from "./SoundToggle";
 import { useLang } from "./LangProvider";
 
 gsap.registerPlugin(ScrollTrigger);
@@ -48,6 +49,13 @@ export function ScrollJourney() {
 
   useEffect(() => {
     if (!wrap.current || !stage.current) return;
+    // pin 建立前文件只有 ~1916px(stage + 出站大廳),之後才被撐到 ~9516px。
+    // 瀏覽器預設的 scrollRestoration 會在那之前就還原位置 → 被 clamp 到出站大廳頂端,
+    // 於是重整時先閃一下最下方的區塊。這頁本來就從「開始乘車」開始,直接關掉還原。
+    const prevRestore = history.scrollRestoration;
+    history.scrollRestoration = "manual";
+    window.scrollTo(0, 0);
+
     const st = ScrollTrigger.create({
       trigger: wrap.current,
       start: "top top",
@@ -57,7 +65,10 @@ export function ScrollJourney() {
       scrub: 0.5,
       onUpdate: (self) => setP(self.progress),
     });
-    return () => st.kill();
+    return () => {
+      st.kill();
+      history.scrollRestoration = prevRestore;
+    };
   }, []);
 
   // 滑鼠視差晃動(只在 ride 生效;gate/exit 平滑收斂回 0,不與相機動畫打架)
@@ -136,11 +147,13 @@ export function ScrollJourney() {
           <button
             className="start"
             onClick={() => {
+              startSoundtrack(); // 使用者手勢啟動,不是 autoplay
               const w = wrap.current!;
               smoothScrollTo(w.offsetTop + TOTAL_LEN * (PHASE.gateEnd + 0.03), 1400); // 進入第一站(月台)
             }}
           >
-            {t({ zh: "開始乘車", en: "Start ride" })} ▸
+            {/* 與 LED 跑馬燈同一套箭頭字元:同樣吃 --font-led 與綠色光暈(不用 icon 就是為了發光) */}
+            {`${t({ zh: "開始乘車", en: "Start ride" })} ►`}
           </button>
         )}
         {showRide && (
@@ -148,14 +161,17 @@ export function ScrollJourney() {
             className="camera"
             style={{ position: "absolute", inset: 0, transformStyle: "preserve-3d", transformOrigin: "center 82%", transform: camTransform, opacity: camOpacity, filter: camFilter, willChange: "transform, opacity" }}
           >
+            {/* 只有車廂進 sway 層:那層常駐 scale(1.035) 過掃描(讓 ±15px 平移不露邊),
+                而 will-change + preserve-3d 會讓整層先光柵化再 GPU 縮放 —— 文字和像素字型
+                會被重新取樣而發糊。照片和 canvas 放大 3.5% 看不出來,文字看得出來。 */}
             <div
               ref={sway}
               style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", placeContent: "center", transformStyle: "preserve-3d", willChange: "transform" }}
             >
               <CabinComposite scene={cur.scene} grade={grade} ledText={t(cur.led)} pan={x} />
-              <StationPanel station={cur} visible={phase === "ride" && dist < 0.34} />
-              {phase === "ride" && <RouteMap index={index} onJump={jumpTo} />}
             </div>
+            <StationPanel station={cur} visible={phase === "ride" && dist < 0.34} />
+            {phase === "ride" && <RouteMap index={index} onJump={jumpTo} />}
           </div>
         )}
         {phase === "exit" && (

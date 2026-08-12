@@ -1,6 +1,7 @@
 "use client";
 import { useLang } from "./LangProvider";
 import { STATIONS } from "@/content/stations";
+import { Icon } from "./Icon";
 
 // 轉入 intro 與正式 section 共用的 hero,確保 pin 解除瞬間畫面一致(無縫交棒)
 export function ConcourseHero() {
@@ -35,12 +36,12 @@ export function Concourse() {
           <div className="concourse-links">
             {terminal.contacts?.map((c) => (
               <a key={c.label} className="concourse-link" href={c.href} target="_blank" rel="noopener">
-                {c.label} <span aria-hidden>↗</span>
+                {c.label} <Icon name="external" />
               </a>
             ))}
             {terminal.link && (
               <a className="concourse-link" href={terminal.link} target="_blank" rel="noopener">
-                {t({ zh: "履歷 PDF", en: "Résumé PDF" })} <span aria-hidden>▸</span>
+                {t({ zh: "履歷 PDF", en: "Résumé PDF" })} <Icon name="play" />
               </a>
             )}
           </div>
@@ -48,7 +49,7 @@ export function Concourse() {
 
         <footer className="concourse-footer">
           <span>© 2026 蔡守傑 NoopyCai</span>
-          <span>{t({ zh: "夜車・區間 — 感謝搭乘", en: "Night Local — thanks for riding" })}</span>
+          <span>{t({ zh: "夜車・區間 · 感謝搭乘", en: "Night Local · thanks for riding" })}</span>
         </footer>
       </div>
     </section>

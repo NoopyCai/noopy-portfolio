@@ -9,6 +9,20 @@ const PAN_LOOPS = 1; // 每站約平移一圈(地標經過一次)
 
 let uid = 0;
 
+// drawScene 是逐像素迴圈(單張 ~108k 次 fillRect)。六站 × {bg,full} 最多 12 張,
+// 快取起來:換站從 4 次重繪降到 0,來回捲動也不再重畫。約 5MB。
+const sceneCache = new Map<string, HTMLCanvasElement>();
+function getScene(scene: SceneType, bg: boolean) {
+  const key = `${scene}|${bg}`;
+  let c = sceneCache.get(key);
+  if (!c) {
+    c = document.createElement("canvas");
+    drawScene(c, scene, { bg });
+    sceneCache.set(key, c);
+  }
+  return c;
+}
+
 // 從 3×寬長條 [bg | full(含地標) | bg] 取一個 window 寬的切片,隨 pan 環繞平移 → 行駛感,且地標不重複。
 function blit(c: HTMLCanvasElement | null, strip: HTMLCanvasElement | null, pan: number) {
   if (!c || !strip) return;
@@ -73,15 +87,10 @@ function SceneLayer({ scene, bg, pos, on, pan }: { scene: SceneType; bg: boolean
   const ref = useRef<HTMLCanvasElement>(null);
   const buf = useRef<HTMLCanvasElement | null>(null);
   useEffect(() => {
-    const full = document.createElement("canvas");
-    drawScene(full, scene, { bg });
+    const full = getScene(scene, bg);
     const W = full.width, H = full.height;
     // 背景層(無地標):中央窗用它當左右兩段,讓地標只在中段出現一次
-    let bgc: HTMLCanvasElement = full;
-    if (!bg) {
-      bgc = document.createElement("canvas");
-      drawScene(bgc, scene, { bg: true });
-    }
+    const bgc: HTMLCanvasElement = bg ? full : getScene(scene, true);
     const strip = document.createElement("canvas");
     strip.width = W * 3;
     strip.height = H;

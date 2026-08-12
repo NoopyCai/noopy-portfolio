@@ -1,6 +1,7 @@
 "use client";
 import { STATIONS } from "@/content/stations";
 import { useLang } from "./LangProvider";
+import { Icon } from "./Icon";
 
 // prefers-reduced-motion / 無 JS 時的語意化直向降級:每站一個 section。
 export function StaticFallback() {
@@ -9,7 +10,7 @@ export function StaticFallback() {
     <main style={{ maxWidth: 820, margin: "0 auto", padding: "48px 20px", display: "grid", gap: 56 }}>
       <header>
         <h1 style={{ fontSize: "clamp(28px,6vw,52px)", margin: 0 }}>蔡守傑 NoopyCai</h1>
-        <p style={{ color: "var(--muted)", fontFamily: "var(--font-led)" }}>夜車・區間 · Night Local — Frontend / Full-stack</p>
+        <p style={{ color: "var(--muted)", fontFamily: "var(--font-led)" }}>夜車・區間 · Night Local · Frontend / Full-stack</p>
       </header>
       {STATIONS.map((s) => {
         const p = s.panel;
@@ -41,7 +42,7 @@ export function StaticFallback() {
               </p>
             )}
             {p.link && (
-              <p><a href={p.link} target="_blank" rel="noopener">{t({ zh: "下載履歷 PDF", en: "Résumé PDF" })} ▸</a></p>
+              <p><a href={p.link} target="_blank" rel="noopener">{t({ zh: "下載履歷 PDF", en: "Résumé PDF" })} <Icon name="play" /></a></p>
             )}
           </section>
         );

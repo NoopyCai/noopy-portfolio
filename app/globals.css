@@ -27,15 +27,27 @@ html, body {
   overflow-x: hidden;
 }
 a { color: var(--green); }
+/* 鍵盤焦點:用 LED 綠當「這個控制項通電了」的訊號(全站原本只有靜音鍵有 focus 樣式) */
+:focus-visible { outline: 2px solid var(--green); outline-offset: 3px; }
+
+/* 圖示(lucide,見 components/Icon.tsx):不用 emoji —— emoji 在三個平台長得都不一樣,
+   而且是彩色圓潤的,和 LED 綠 / 像素 / 深底的語言正面衝突。 */
+.icon { flex: none; vertical-align: -0.12em; }
+/* 有圖示的控制項改 inline-flex,圖示才會跟文字基線對齊而不是硬塞在後面 */
+.start, .detail-btn, .sp-link, .concourse-link, .sound-dot, .detail-close { display: inline-flex; align-items: center; gap: .4em; }
+.detail-close { justify-content: center; }
 
 /* LED 報站跑馬燈 */
 .led { position: relative; width: 100%; height: 100%; overflow: hidden; background: #050805; display: flex; align-items: center; }
-.led-run { white-space: nowrap; font-family: var(--font-led); font-weight: 700; font-size: clamp(9px, 1.35vw, 19px); letter-spacing: .12em; color: var(--green); text-shadow: 0 0 6px rgba(6, 255, 49, .85); animation: marq 20s linear infinite; }
+.led-run { white-space: nowrap; font-family: var(--font-led); font-weight: 400; font-size: clamp(9px, 1.35vw, 19px); letter-spacing: .12em; color: var(--green); text-shadow: 0 0 6px rgba(6, 255, 49, .85); animation: marq 20s linear infinite; }
 @keyframes marq { from { transform: translateX(28%); } to { transform: translateX(-72%); } }
 
 /* 控制鈕(語言 / 音效) */
 .ctrl { font-family: var(--font-led); font-size: 12px; letter-spacing: .08em; cursor: pointer; color: var(--text); background: rgba(13, 21, 36, .72); border: 1px solid var(--line); backdrop-filter: blur(8px); padding: 7px 11px; border-radius: 8px; }
 .ctrl:hover { border-color: var(--green); color: var(--green); }
+/* 靜音鍵:左上角圖示,避開右上語言鍵與畫面正中的資訊卡 */
+.sound-dot { position: fixed; top: 14px; left: 14px; z-index: 50; padding: 6px 9px; line-height: 1; opacity: .55; transition: opacity .2s; }
+.sound-dot:hover, .sound-dot:focus-visible { opacity: 1; }
 
 @media (prefers-reduced-motion: reduce) { .led-run { animation: none; } }
 
@@ -94,13 +106,17 @@ a { color: var(--green); }
 }
 
 /* 路線圖跳站導覽(右側) */
-.routemap { position: absolute; right: 2.2%; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; align-items: flex-end; gap: 20px; z-index: 6; }
-.routemap::before { content: ""; position: absolute; right: 5px; top: 4px; bottom: 4px; width: 2px; background: linear-gradient(var(--emu-green), rgba(110, 180, 63, .25)); opacity: .5; }
-.routemap-dot { position: relative; width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--emu-green); background: var(--bg); cursor: pointer; padding: 0; transition: transform .2s, background .2s, box-shadow .2s; }
-.routemap-dot.past { background: var(--emu-green); }
-.routemap-dot.on { background: var(--amber); border-color: var(--amber); box-shadow: 0 0 12px rgba(242, 194, 48, .85); transform: scale(1.25); }
-.routemap-dot:hover { border-color: var(--amber); }
-.routemap-label { position: absolute; right: 22px; top: 50%; transform: translate(6px, -50%); white-space: nowrap; font-family: var(--font-led); font-size: 11px; letter-spacing: .06em; color: var(--text); background: rgba(13, 21, 36, .78); border: 1px solid var(--line); padding: 3px 9px; border-radius: 6px; opacity: 0; transition: opacity .2s, transform .2s; pointer-events: none; backdrop-filter: blur(6px); }
+/* 圓點視覺仍是 12px,但按鈕本身撐到 44×44 的觸控命中區(WCAG 2.5.5 / Apple HIG),
+   視覺圓點移到 ::before —— 手機上它是唯一的導覽,10px 打不到。 */
+.routemap { position: absolute; right: 2.2%; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; align-items: flex-end; gap: 0; z-index: 6; }
+.routemap::before { content: ""; position: absolute; right: 21px; top: 22px; bottom: 22px; width: 2px; background: linear-gradient(var(--emu-green), rgba(110, 180, 63, .25)); opacity: .5; }
+.routemap-dot { position: relative; width: 44px; height: 44px; padding: 0; border: none; background: none; cursor: pointer; display: grid; place-items: center; }
+.routemap-dot::before { content: ""; width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--emu-green); background: var(--bg); transition: transform .2s, background .2s, box-shadow .2s, border-color .2s; }
+.routemap-dot.past::before { background: var(--emu-green); }
+.routemap-dot.on::before { background: var(--amber); border-color: var(--amber); box-shadow: 0 0 12px rgba(242, 194, 48, .85); transform: scale(1.25); }
+.routemap-dot:hover::before { border-color: var(--amber); }
+.routemap-dot:active::before { transform: scale(.9); }
+.routemap-label { position: absolute; right: 40px; top: 50%; transform: translate(6px, -50%); white-space: nowrap; font-family: var(--font-led); font-size: 11px; letter-spacing: .06em; color: var(--text); background: rgba(13, 21, 36, .78); border: 1px solid var(--line); padding: 3px 9px; border-radius: 6px; opacity: 0; transition: opacity .2s, transform .2s; pointer-events: none; backdrop-filter: blur(6px); }
 .routemap-dot:hover .routemap-label, .routemap-dot.on .routemap-label { opacity: 1; transform: translate(0, -50%); }
 
 /* 到站廣播主句 + 看細節按鈕 */
@@ -122,13 +138,15 @@ a { color: var(--green); }
 
 /* Start ride 按鈕 */
 .start { font-family: var(--font-led); font-size: clamp(20px, 3vw, 34px); letter-spacing: .14em; color: var(--green); background: none; border: none; cursor: pointer; text-shadow: 0 0 12px rgba(6, 255, 49, .9), 0 0 30px rgba(6, 255, 49, .5); animation: pulse 2.2s ease-in-out infinite; }
+.start:active { transform: translateY(1px); }
+.detail-btn:active, .concourse-link:active, .ctrl:active { transform: translateY(1px); }
 @keyframes pulse { 50% { text-shadow: 0 0 20px rgba(6, 255, 49, 1), 0 0 44px rgba(6, 255, 49, .7); } }
 @media (prefers-reduced-motion: reduce) { .start { animation: none; } }
 
 /* 到站轉場 → 出站大廳 */
 .concourse-intro { position: absolute; inset: 0; z-index: 5; display: grid; justify-items: center; align-content: start; padding-top: 8vh; background: var(--bg); }
 .concourse-intro-inner { max-width: 760px; width: 100%; padding: 0 24px; }
-.concourse { background: var(--bg); color: var(--text); min-height: 100vh; padding: 8vh 24px 44px; }
+.concourse { background: var(--bg); color: var(--text); min-height: 100vh; min-height: 100dvh; padding: 8vh 24px 44px; }
 .concourse-inner { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 40px; }
 .concourse-hero { text-align: center; }
 .concourse-hero .eyebrow { font-family: var(--font-led); font-size: clamp(18px, 3vw, 26px); font-weight: 400; letter-spacing: .3em; color: var(--green); margin: 0 0 10px; }
@@ -150,7 +168,7 @@ a { color: var(--green); }
 .sp-tags { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
 .sp-tag { font-family: var(--font-led); font-size: 11px; color: var(--green); border: 1px solid rgba(6, 255, 49, .4); border-radius: 999px; padding: 4px 10px; }
 .sp-metrics { display: flex; flex-wrap: wrap; gap: 20px; row-gap: 10px; margin: 8px 0; }
-.sp-metric-n { font-family: var(--font-led); font-weight: 700; font-size: 24px; color: var(--amber); }
+.sp-metric-n { font-family: var(--font-led); font-weight: 400; font-size: 26px; color: var(--amber); letter-spacing: .02em; }
 .sp-metric-l { font-size: 11px; color: var(--muted); }
 .sp-skills { display: grid; gap: 8px; }
 .sp-skills b { color: var(--emu-green); }
@@ -166,7 +184,7 @@ a { color: var(--green); }
 /* 平板 / 直式 */
 @media (max-width: 900px) {
   .station-panel { left: 4%; bottom: 5%; max-width: 62%; }
-  .routemap { right: 12px; gap: 16px; }
+  .routemap { right: 12px; gap: 0; }
 }
 
 /* 手機(直式為主):面板擺畫面正中央、路線圖收起文字標籤 */
@@ -174,9 +192,11 @@ a { color: var(--green); }
   /* 垂直居中用 top/bottom:0 + height:fit-content + margin:auto —— 不用 transform,
      transform 已被元件的淡入 inline style 佔用。左右 28px 讓開路線圖圓點。 */
   .station-panel {
-    left: 22px; right: 22px; top: 0; bottom: 0; max-width: none;
+    left: 28px; right: 28px; top: 0; bottom: 0; max-width: none;
     height: fit-content; margin: auto 0;
     max-height: 84vh; overflow-y: auto; /* 極長內容的保險 */
+    overscroll-behavior: contain; /* 卡片捲到底不要順帶把整列車拉走(iOS scroll chaining) */
+    -webkit-overflow-scrolling: touch;
     padding: 19px 18px 21px; border-radius: 22px;
     text-align: left; /* 段落靠左才讀得動(置中的內文兩邊都是鋸齒) */
     background: rgba(10, 16, 20, .66); /* 直式時卡片壓在亮窗景上,底要更實才有對比 */
@@ -202,8 +222,8 @@ a { color: var(--green); }
   .sp-contacts { flex-direction: column; align-items: flex-start; gap: 11px; margin: 13px 0 0; font-size: 14px; }
   .sp-actions { gap: 12px; margin-top: 15px; }
   .detail-btn { padding: 11px 18px; } /* 拉到 ~44px 觸控高度 */
-  .routemap { right: 8px; gap: 13px; }
-  .routemap-dot { width: 10px; height: 10px; }
+  .routemap { right: -6px; gap: 0; } /* 44px 命中區:負值讓圓點視覺位置維持原樣、又不壓到資訊卡 */
+  .routemap-dot::before { width: 10px; height: 10px; }
   .routemap-label { display: none; } /* 手機收起站名,保留可點的進度點 */
   .ctrl { font-size: 11px; padding: 6px 9px; letter-spacing: .04em; }
   .detail-card { padding: 20px 18px 20px; border-radius: 16px; }
@@ -214,5 +234,5 @@ a { color: var(--green); }
 @media (max-height: 480px) and (orientation: landscape) {
   .station-panel { bottom: 8px; left: 12px; max-width: 46%; padding: 10px 13px; }
   .station-panel .sp-body { display: none; } /* 矮螢幕省略長描述,保留標題/impact/標籤 */
-  .routemap { gap: 11px; }
+  .routemap { gap: 0; }
 }

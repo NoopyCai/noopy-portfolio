@@ -32,3 +32,45 @@
 
 ## 6. sea.png — 終點・南迴海景(破曉海岸)
 > The Taiwan south-link coastline at dawn. Calm ocean meeting a soft pink-and-orange gradient sky, the sun rising with a shimmering golden light column on the water, a distant rocky headland, a tiny fishing boat far out. Serene and cinematic — echoing the mountain-and-lake poster mood in the reference image.
+
+
+ ① platform.png(月台・出發 松山夜)
+
+  ▎ Semi-realistic anime-style digital painting, in the exact art style of the attached reference image: soft cinematic lighting, muted natural Taiwan palette, gentle atmospheric haze, painterly detail (Makoto Shinkai mood). Ultra-wide cinematic panorama, landscape
+  ▎ orientation, aspect ratio 21:9 or wider. Distant scenery seen passing by from a moving train — no window frame, no train, no text, no watermark, no people. Horizon at ~58% from the top, subtle horizontal motion. Scene: a quiet Taiwan suburban railway platform at
+  ▎ night, warm sodium-lamp glow pooling on the wet platform, a simple green station-name sign, deep navy sky, distant low-rise buildings with a few warm lit windows, empty tracks catching the light. Calm, nocturnal, cinematic.
+
+  ---
+  ② city.png(電商推薦系統 黃昏城市)
+
+  ▎ Semi-realistic anime-style digital painting, in the exact art style of the attached reference image: soft cinematic lighting, muted natural Taiwan palette, gentle atmospheric haze, painterly detail (Makoto Shinkai mood). Ultra-wide cinematic panorama, landscape
+  ▎ orientation, aspect ratio 21:9 or wider. Distant scenery seen passing by from a moving train — no window frame, no train, no text, no watermark, no people. Horizon at ~58% from the top, subtle horizontal motion. Scene: a Taiwanese city skyline at dusk seen from an
+  ▎ elevated railway, layered building silhouettes fading into warm orange-to-purple haze, thousands of tiny warm window lights, a soft glowing low sun near the horizon, distant blue mountains behind the city. Dreamy dusk atmosphere.
+
+  ---
+  ③ river.png(LINE LIFF 夜間河橋)
+
+  ▎ Semi-realistic anime-style digital painting, in the exact art style of the attached reference image: soft cinematic lighting, muted natural Taiwan palette, gentle atmospheric haze, painterly detail (Makoto Shinkai mood). Ultra-wide cinematic panorama, landscape
+  ▎ orientation, aspect ratio 21:9 or wider. Distant scenery seen passing by from a moving train — no window frame, no train, no text, no watermark, no people. Horizon at ~58% from the top, subtle horizontal motion. Scene: a wide calm river at night crossed by a softly
+  ▎ lit cable-stayed bridge, a gentle full moon, warm city lights shimmering as reflections in the dark water, scattered faint stars, deep blue and teal palette. Tranquil night mood.
+
+  ---
+  ④ taipei.png(AI 工具整合 白晝台北)
+
+  ▎ Semi-realistic anime-style digital painting, in the exact art style of the attached reference image: soft cinematic lighting, muted natural Taiwan palette, gentle atmospheric haze, painterly detail (Makoto Shinkai mood). Ultra-wide cinematic panorama, landscape
+  ▎ orientation, aspect ratio 21:9 or wider. Distant scenery seen passing by from a moving train — no window frame, no train, no text, no watermark, no people. Horizon at ~58% from the top, subtle horizontal motion. Scene: Taipei city in soft clear daylight, Taipei 101
+  ▎ tower rising elegantly above layered green mountains (Elephant Mountain / Xiangshan), gentle blue sky with soft white clouds, a low-rise cityscape below. Fresh, bright, airy atmosphere.
+
+  ---
+  ⑤ field.png(技能車廂 田野黃昏)
+
+  ▎ Semi-realistic anime-style digital painting, in the exact art style of the attached reference image: soft cinematic lighting, muted natural Taiwan palette, gentle atmospheric haze, painterly detail (Makoto Shinkai mood). Ultra-wide cinematic panorama, landscape
+  ▎ orientation, aspect ratio 21:9 or wider. Distant scenery seen passing by from a moving train — no window frame, no train, no text, no watermark, no people. Horizon at ~58% from the top, subtle horizontal motion. Scene: rural Taiwan rice paddies at golden hour, flooded
+  ▎ fields mirroring a warm glowing sky, distant green mountain ridges, a lone farmhouse and a solitary tree, telephone poles receding into the distance. Peaceful, nostalgic golden light.
+
+  ---
+  ⑥ sea.png(終點・南迴海景 破曉海岸)
+
+  ▎ Semi-realistic anime-style digital painting, in the exact art style of the attached reference image: soft cinematic lighting, muted natural Taiwan palette, gentle atmospheric haze, painterly detail (Makoto Shinkai mood). Ultra-wide cinematic panorama, landscape
+  ▎ orientation, aspect ratio 21:9 or wider. Distant scenery seen passing by from a moving train — no window frame, no train, no text, no watermark, no people. Horizon at ~58% from the top, subtle horizontal motion. Scene: the Taiwan south-link coastline at dawn, calm
+  ▎ ocean meeting a soft pink-and-orange gradient sky, the sun rising with a shimmering golden light column on the water, a distant rocky headland, a tiny fishing boat far out. Serene and cinematic — echoing the mountain-and-lake poster mood in the reference image.
