@@ -1,15 +1,21 @@
 import type { Grade } from "@/content/stations";
 
-// gate(開始乘車)→ ride(六站)→ exit(到站起身轉身,交棒給出站大廳)
-export const PHASE = { gateEnd: 0.13, rideEnd: 0.8 } as const;
+// gate(開始乘車)→ door(車門開啟過場,車廂已掛載在門後)→ ride(六站)→ exit(起身轉身)
+// door 不是獨立 phase:gateEnd 起車廂就掛載(phaseOf 回 "ride"),doorProgress 驅動
+// 上層的 shader 過場;rideProgress 從 doorEnd 才開始走,門開完剛好停在第一站。
+export const PHASE = { gateEnd: 0.13, doorEnd: 0.22, rideEnd: 0.8 } as const;
 export const clamp = (v: number, a = 0, b = 1) => Math.max(a, Math.min(b, v));
 export const smooth = (t: number) => t * t * (3 - 2 * t);
 
 export function phaseOf(p: number): "gate" | "ride" | "exit" {
   return p < PHASE.gateEnd ? "gate" : p < PHASE.rideEnd ? "ride" : "exit";
 }
+// 車門過場進度 0→1(gateEnd → doorEnd)
+export function doorProgress(p: number) {
+  return clamp((p - PHASE.gateEnd) / (PHASE.doorEnd - PHASE.gateEnd));
+}
 export function rideProgress(p: number) {
-  return clamp((p - PHASE.gateEnd) / (PHASE.rideEnd - PHASE.gateEnd));
+  return clamp((p - PHASE.doorEnd) / (PHASE.rideEnd - PHASE.doorEnd));
 }
 // exit 段進度 0→1(到站相機動畫:起身 + 轉身)
 export function exitProgress(p: number) {

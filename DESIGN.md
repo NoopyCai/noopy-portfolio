@@ -183,6 +183,7 @@ background: rgba(10, 16, 20, .66);
 
 ## 6. 動態
 
+- **車門過場**（gate → ride）：真的 3D 場景（three.js，`components/door3d/`）。四拍：門縫細光 → 塞拉門 3D 滑開 + 暖光楔灑月台地面 → 相機 dolly-in 穿過門框（門柱掠過＝視差）→ 相機定住、canvas 淡出溶接給 DOM 車廂。全程由捲動進度插值，可倒放（倒捲就倒關）。門板、警戒條、光楔、門縫光**全是程序繪製的 canvas 貼圖**，沒有外來素材；three 走 `dynamic import()` 的 async chunk，首頁 First Load JS 不受影響。
 - **相機**：`exit` 相位第一人稱起身 + 轉身。桌機真 3D（`rotateY(-85deg)` + `perspective: 1200px`），手機退化成 2.5D（起身 + 橫向滑出 + 輕微轉，省掉重 3D）。
 - **滑鼠視差**：sway 層 `translate3d(±15px, ±12px) rotateX/Y(±1.4deg) scale(1.035)`，只在 `ride` 生效，`gate`/`exit` 平滑收斂回 0。`scale(1.035)` 是過掃描，**只有車廂進這層**（文字會被重新取樣而發糊）。
 - **窗景流動**：每站約平移一圈，從 `[bg | full | bg]` 的三倍寬長條取切片環繞（地標只在中段出現一次，不會重複）。位移做整數對齊，避免抖色爬行閃爍。

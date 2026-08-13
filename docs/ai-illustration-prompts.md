@@ -55,6 +55,72 @@ schematic look, glowing green lines, minimal, 16:9.
 
 ---
 
+## D. 車門過場素材（三張，已上線）
+
+> **現況**：`public/door/` 的三張圖已經接上 `components/door3d/scene.ts`，是門過場的正式外觀。
+> `components/door3d/textures.ts` 的程序貼圖（Canvas 2D、painterly、無外部圖檔）**沒有被刪掉**，
+> 它是 runtime fallback：圖檔 404 / 離線 / 解碼失敗時 `TextureLoader` 的 onError 什麼都不做，
+> 材質就留在程序貼圖上，過場照跑。要重生素材時照下面的規格，蓋回同樣的檔名即可。
+>
+> **授權**：三張都是使用者用本檔的 prompt 自行生成的，沒有外部素材授權問題。
+
+| # | 檔案 | 尺寸 | 內容 |
+|---|---|---|---|
+| ① | `public/door/door-closed.jpg` | **1:1，≥2048²** | 雙片關閉的塞拉門，**門縫在正中**、正面平視 |
+| ② | `public/door/car-body.jpg` | **1:1，≥2048²** | 車體外側牆：不鏽鋼拼板 + 鉚釘 + 綠色飾帶 |
+| ③ | `public/door/platform-floor.jpg` | **16:9**（可選） | 俯視月台地面：混凝土 + 一條導盲磚黃帶 |
+
+三張共同要求：**orthographic 正投影、無透視收斂**（會被貼到平面 mesh 上，有透視就對不上）、
+**無任何文字與 logo**、無人物、無浮水印、夜間曝光。
+
+**① 車門本體**
+```
+Orthographic front-on elevation of a pair of closed Taiwan commuter train (EMU900) plug doors,
+seen from the night platform side, perfectly symmetrical with the central seam exactly at the
+image centre. Two door leaves, each with one tall vertical rounded-rectangle window of
+near-black glass faintly reflecting the dim platform; dark desaturated teal-green painted metal
+door skin with subtle tonal variation; slim dark rubber window seal; a yellow hazard band with
+gentle paint wear running horizontally across the lower part of both leaves. Flat elevation
+view, no perspective convergence, no vanishing point, even lighting with a soft vignette.
+Cinematic night exposure, muted limited palette, fine grain. No people, no text, no lettering,
+no signage, no logos, no watermark. Square 1:1.
+```
+
+**② 車體外側牆**
+```
+Orthographic front-on elevation of the exterior side wall of a Taiwan commuter train (EMU900),
+brushed stainless steel panels with visible panel seams and rows of small rivets, and one
+horizontal bright green livery band running edge to edge across the lower third. Flat elevation
+view, no perspective convergence, seamless left and right edges so it can tile horizontally.
+Cinematic night exposure, muted palette, fine grain. No people, no text, no lettering, no
+logos, no watermark. Square 1:1.
+```
+
+**③ 月台地面**
+```
+Top-down orthographic view of a train platform floor: large smooth concrete slabs with subtle
+staining and grout lines, and one horizontal band of yellow tactile paving tiles (raised dot
+pattern) running edge to edge across the middle. Straight overhead view, no perspective, no
+people, no objects. Dim warm pools of light from overhead platform lamps. Cinematic night
+exposure, fine grain. No text, no lettering, no logos, no watermark. Horizontal 16:9.
+```
+
+**接上去之後要確認的三件事**（`components/door3d/scene.ts`）
+1. **門縫對位**：①的中線切半 → 左片吃 u 0–0.5、右片 0.5–1。實測目前這張 1254px 寬的門縫在
+   x = 626，距正中只差 1px，所以 `SEAM_U = 0`；換圖若偏移變大就調那個常數。
+2. **綠帶高度**：②的綠帶在貼圖 v 0.301–0.421 → 世界 y 0.53–1.16（門洞上緣 1.5 底下）。
+   換圖後綠帶位置若跑掉，改 `CAR_TILE`（一張貼圖代表幾米見方）。
+3. **導盲磚位置**：③的黃帶在貼圖 v 0.450–0.590 → 用 `floorTex.offset.y` 壓到門前 1.0–1.6 m。
+   換圖後量一次黃帶的 v 範圍，重解那個 offset。
+
+⚠️ **曝光**：門場景的環境光只有 0.25–0.48（冷藍夜色），素材直接乘下去會整片沉進黑裡。
+`scene.ts` 的 `EXPOSURE = { door, wall, floor }` 就是各張的曝光補償係數（`color.setScalar`），
+換圖後對照 `public/cabin.jpg` 的車廂牆面（sRGB ≈ 0.17）重新目視校一次。
+
+**體積**：原始 PNG 共 1.18 MB，已用 mozjpeg q82 轉成 JPEG 共 434 KB（視覺無差），PNG 已移除。
+
+---
+
 ## 反向提示詞（Negative prompt，SDXL/相容工具用）
 ```
 people, passenger, faces, hands, gibberish text, warped perspective, tilted, asymmetrical,

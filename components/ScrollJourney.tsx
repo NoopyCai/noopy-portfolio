@@ -3,8 +3,9 @@ import { useEffect, useRef, useState } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { STATIONS } from "@/content/stations";
-import { phaseOf, rideProgress, exitProgress, lerpGrade, clamp, smooth, PHASE } from "@/lib/progress";
+import { phaseOf, doorProgress, rideProgress, exitProgress, lerpGrade, clamp, smooth, PHASE } from "@/lib/progress";
 import { CabinComposite } from "./CabinComposite";
+import { Door3D } from "./Door3D";
 import { StationPanel } from "./StationPanel";
 import { RouteMap } from "./RouteMap";
 import { ConcourseHero } from "./Concourse";
@@ -13,7 +14,12 @@ import { useLang } from "./LangProvider";
 
 gsap.registerPlugin(ScrollTrigger);
 
-const TOTAL_LEN = 7600; // pin 捲動總距離(px):gate → ride(六站) → exit(到站起身轉身)
+const TOTAL_LEN = 8200; // pin 捲動總距離(px):gate → door(車門過場) → ride(六站) → exit(起身轉身)
+
+// 開頁歸零只做一次(module scope,不是 ref)。dev 的 StrictMode 會把 effect 跑兩次、
+// HMR 會再跑一次 —— 那時使用者可能已經在車廂裡,scrollTo(0,0) 會把人硬拉回月台,
+// 途中 pin 重算 + 相位跳變就是「往上滑白屏」的來源之一。
+let didInitialReset = false;
 
 // 逐幀 window.scrollTo 的平滑捲動:每幀觸發真實 scroll 事件驅動 ScrollTrigger。
 // (不用 gsap ScrollToPlugin —— 它與 pinned scrub ScrollTrigger 會回饋成死迴圈而凍結)
@@ -36,6 +42,7 @@ export function ScrollJourney() {
   const stage = useRef<HTMLDivElement>(null);
   const sway = useRef<HTMLDivElement>(null);
   const phaseRef = useRef<"gate" | "ride" | "exit">("gate");
+  const doorRef = useRef(0); // 給 sway 迴圈:門開完才開始跟滑鼠,交棒瞬間位移趨近 0
   const [p, setP] = useState(0);
   const [narrow, setNarrow] = useState(false); // 手機:轉場退化為 2.5D
 
@@ -54,7 +61,10 @@ export function ScrollJourney() {
     // 於是重整時先閃一下最下方的區塊。這頁本來就從「開始乘車」開始,直接關掉還原。
     const prevRestore = history.scrollRestoration;
     history.scrollRestoration = "manual";
-    window.scrollTo(0, 0);
+    if (!didInitialReset) {
+      didInitialReset = true;
+      window.scrollTo(0, 0);
+    }
 
     const st = ScrollTrigger.create({
       trigger: wrap.current,
@@ -82,7 +92,7 @@ export function ScrollJourney() {
     };
     let raf = 0;
     const tick = () => {
-      const active = phaseRef.current === "ride";
+      const active = phaseRef.current === "ride" && doorRef.current >= 1;
       const tgx = active ? target.x : 0, tgy = active ? target.y : 0;
       cur.x += (tgx - cur.x) * 0.06;
       cur.y += (tgy - cur.y) * 0.06;
@@ -103,6 +113,8 @@ export function ScrollJourney() {
   const n = STATIONS.length;
   const phase = phaseOf(p);
   phaseRef.current = phase;
+  const doorP = doorProgress(p);
+  doorRef.current = doorP;
   const rp = rideProgress(p);
   const x = rp * (n - 1);
   const index = Math.round(clamp(x, 0, n - 1));
@@ -126,11 +138,11 @@ export function ScrollJourney() {
   const camFilter = turn > 0 ? `blur(${(turn * 4).toFixed(2)}px)` : "none";
   const introOpacity = smooth(clamp((e - 0.55) / 0.4)); // concourse hero 轉入淡入
 
-  // 跳到第 i 站(路線圖點擊)
+  // 跳到第 i 站(路線圖點擊)。下限 doorEnd:跳站不要落在半開的車門裡
   const jumpTo = (i: number) => {
     if (!wrap.current) return;
     const r = n > 1 ? i / (n - 1) : 0;
-    const pTarget = clamp(PHASE.gateEnd + r * (PHASE.rideEnd - PHASE.gateEnd), PHASE.gateEnd + 0.02, PHASE.rideEnd - 0.01);
+    const pTarget = clamp(PHASE.doorEnd + r * (PHASE.rideEnd - PHASE.doorEnd), PHASE.doorEnd + 0.005, PHASE.rideEnd - 0.01);
     smoothScrollTo(wrap.current.offsetTop + TOTAL_LEN * pTarget, 1200);
   };
 
@@ -146,10 +158,11 @@ export function ScrollJourney() {
         {phase === "gate" && (
           <button
             className="start"
+            style={{ opacity: 1 - smooth(clamp((p - 0.09) / 0.04)) }} /* 進門前先淡出,不要硬切消失 */
             onClick={() => {
               startSoundtrack(); // 使用者手勢啟動,不是 autoplay
               const w = wrap.current!;
-              smoothScrollTo(w.offsetTop + TOTAL_LEN * (PHASE.gateEnd + 0.03), 1400); // 進入第一站(月台)
+              smoothScrollTo(w.offsetTop + TOTAL_LEN * (PHASE.doorEnd + 0.005), 2200); // 捲過整段開門,停在第一站(月台)。1800 太趕,門還沒「開完」人就進去了
             }}
           >
             {/* 與 LED 跑馬燈同一套箭頭字元:同樣吃 --font-led 與綠色光暈(不用 icon 就是為了發光) */}
@@ -170,10 +183,17 @@ export function ScrollJourney() {
             >
               <CabinComposite scene={cur.scene} grade={grade} ledText={t(cur.led)} pan={x} />
             </div>
-            <StationPanel station={cur} visible={phase === "ride" && dist < 0.34} />
-            {phase === "ride" && <RouteMap index={index} onJump={jumpTo} />}
+            <StationPanel station={cur} visible={phase === "ride" && doorP >= 1 && dist < 0.34} />
+            {phase === "ride" && doorP >= 1 && <RouteMap index={index} onJump={jumpTo} />}
           </div>
         )}
+        {/* 車門過場:three.js 的 3D 場景蓋在整個舞台上(含 gate 按鈕之下、車廂之上)。
+            progress 0 = 關門待機(門縫漏光),1 = 相機已經穿過門框停在車廂前;最後 15%
+            canvas 自己淡出,DOM 車廂(活窗景 + 跑馬燈)透出來接手。
+            **永遠掛載**,離開門區間只用 CSS 收成 display:none —— 條件式掛載會讓 WebGL
+            context 隨著上下捲反覆建/毀,實測會整片白屏(詳見 Door3D 的註解)。
+            多留 0.02 的緩衝是為了讓 canvas 先淡到 0 再隱藏,不要在還看得見時消失。 */}
+        <Door3D progress={doorP} active={p < PHASE.doorEnd + 0.02} />
         {phase === "exit" && (
           <div className="concourse-intro" style={{ opacity: introOpacity, pointerEvents: "none" }}>
             <div className="concourse-intro-inner"><ConcourseHero /></div>

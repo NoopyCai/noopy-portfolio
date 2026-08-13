@@ -136,8 +136,14 @@ a { color: var(--green); }
 @keyframes rise { from { opacity: 0; transform: translateY(14px); } }
 @media (prefers-reduced-motion: reduce) { .detail-modal, .detail-card { animation: none; } }
 
-/* Start ride 按鈕 */
-.start { font-family: var(--font-led); font-size: clamp(20px, 3vw, 34px); letter-spacing: .14em; color: var(--green); background: none; border: none; cursor: pointer; text-shadow: 0 0 12px rgba(6, 255, 49, .9), 0 0 30px rgba(6, 255, 49, .5); animation: pulse 2.2s ease-in-out infinite; }
+/* 車門開啟過場(Door3D 的 three.js 場景):蓋住車廂、墊在 start 按鈕之下。
+   不給 CSS 底色 —— 沒有 WebGL(或 three 的 chunk 載不下來)時保持透明,退回直接切換 */
+.door-canvas { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 7; pointer-events: none; }
+/* 門開完就收起來:元素留在 DOM(WebGL context 不能反覆建/毀),但不佔合成層 */
+.door-canvas-idle { display: none; }
+
+/* Start ride 按鈕(z-index 要壓過 door canvas) */
+.start { position: relative; z-index: 8; font-family: var(--font-led); font-size: clamp(20px, 3vw, 34px); letter-spacing: .14em; color: var(--green); background: none; border: none; cursor: pointer; text-shadow: 0 0 12px rgba(6, 255, 49, .9), 0 0 30px rgba(6, 255, 49, .5); animation: pulse 2.2s ease-in-out infinite; }
 .start:active { transform: translateY(1px); }
 .detail-btn:active, .concourse-link:active, .ctrl:active { transform: translateY(1px); }
 @keyframes pulse { 50% { text-shadow: 0 0 20px rgba(6, 255, 49, 1), 0 0 44px rgba(6, 255, 49, .7); } }
