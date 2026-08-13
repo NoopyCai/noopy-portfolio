@@ -79,6 +79,9 @@ export function Window({ scene, rect, bg, pan }: { scene: SceneType; rect: Rect;
       {layers.map((l) => (
         <SceneLayer key={l.id} scene={l.scene} bg={bg} pos={rect.pos} on={l.on} pan={pan} />
       ))}
+      {/* A6:窗上那層玻璃。少了它,窗景看起來像挖了個洞直接看出去,而不是隔著車窗看。
+          極淡是刻意的 —— 疊在窗景之上的任何亮度都會吃掉夜景的層次(見 audit §1.2)。 */}
+      <div className="win-glass" />
     </div>
   );
 }

@@ -51,6 +51,20 @@ a { color: var(--green); }
 
 @media (prefers-reduced-motion: reduce) { .led-run { animation: none; } }
 
+/* 車窗玻璃(A6):一道斜向反光帶 + 兩角水氣。總不透明度上限 0.05 ——「極淡」是規格不是保守,
+   窗景本來就是夜景,任何一點多餘的白都會把層次洗掉。兩角的 radial 刻意擺在反光帶(47–53%)
+   打不到的對角,疊加後仍在上限內。
+   全部用 % 定位:直式手機的 cover 會把中央窗裁掉一大塊,寫死 px 的話反光帶就跑到畫面外了。
+   --glass-x/y 由 ScrollJourney 的 sway 迴圈寫在 .camera 上;觸控裝置恆 0,靜態層照舊。 */
+.win-glass {
+  position: absolute; inset: 0; pointer-events: none;
+  transform: translate3d(var(--glass-x, 0px), var(--glass-y, 0px), 0);
+  background:
+    linear-gradient(105deg, transparent 40%, rgba(220, 235, 255, .045) 47%, rgba(220, 235, 255, .02) 53%, transparent 61%),
+    radial-gradient(ellipse 30% 30% at 4% 100%, rgba(255, 255, 255, .03), transparent 70%),
+    radial-gradient(ellipse 30% 30% at 100% 4%, rgba(255, 255, 255, .03), transparent 70%);
+}
+
 /* 綠色線稿車廂(Boot) */
 .wirecar { width: 100%; height: 100%; filter: drop-shadow(0 0 2.5px rgba(6, 255, 49, .55)); }
 .wirecar .draw { fill: none; stroke: var(--green); stroke-width: 2.4; stroke-linejoin: round; stroke-linecap: round; }
@@ -116,6 +130,17 @@ a { color: var(--green); }
 .routemap-dot.on::before { background: var(--amber); border-color: var(--amber); box-shadow: 0 0 12px rgba(242, 194, 48, .85); transform: scale(1.25); }
 .routemap-dot:hover::before { border-color: var(--amber); }
 .routemap-dot:active::before { transform: scale(.9); }
+/* 點擊漣漪:跳站要捲 1200ms,中間那段空白得先給一個「按到了」的回應。
+   對齊的是 ::before 那顆 12px 視覺圓點,不是 44px 的觸控命中區 —— 從 44px 盒子擴散會大得離譜。
+   用 left/top 50% + 負 margin 而不是 grid 置中:abs 子元素在 grid 容器裡的靜態位置各家不一致。 */
+.routemap-dot::after {
+  content: ""; position: absolute; left: 50%; top: 50%; width: 12px; height: 12px; margin: -6px 0 0 -6px;
+  border-radius: 50%; border: 2px solid var(--amber); opacity: 0; pointer-events: none;
+}
+.routemap-dot:active::after { animation: ripple 260ms ease-out; }
+@keyframes ripple { from { transform: scale(.6); opacity: .8; } to { transform: scale(2.2); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .routemap-dot:active::after { animation: none; } }
+
 .routemap-label { position: absolute; right: 40px; top: 50%; transform: translate(6px, -50%); white-space: nowrap; font-family: var(--font-led); font-size: 11px; letter-spacing: .06em; color: var(--text); background: rgba(13, 21, 36, .78); border: 1px solid var(--line); padding: 3px 9px; border-radius: 6px; opacity: 0; transition: opacity .2s, transform .2s; pointer-events: none; backdrop-filter: blur(6px); }
 .routemap-dot:hover .routemap-label, .routemap-dot.on .routemap-label { opacity: 1; transform: translate(0, -50%); }
 
@@ -230,6 +255,7 @@ a { color: var(--green); }
   .detail-btn { padding: 11px 18px; } /* 拉到 ~44px 觸控高度 */
   .routemap { right: -6px; gap: 0; } /* 44px 命中區:負值讓圓點視覺位置維持原樣、又不壓到資訊卡 */
   .routemap-dot::before { width: 10px; height: 10px; }
+  .routemap-dot::after { width: 10px; height: 10px; margin: -5px 0 0 -5px; } /* 漣漪跟著視覺圓點縮 */
   .routemap-label { display: none; } /* 手機收起站名,保留可點的進度點 */
   .ctrl { font-size: 11px; padding: 6px 9px; letter-spacing: .04em; }
   .detail-card { padding: 20px 18px 20px; border-radius: 16px; }

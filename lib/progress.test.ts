@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { phaseOf, doorProgress, rideProgress, exitProgress, stationAt, lerpGrade } from "./progress";
+import { phaseOf, doorProgress, rideProgress, exitProgress, stationAt, lerpGrade, stationEase, DWELL } from "./progress";
 import type { Grade } from "@/content/stations";
 
 describe("progress", () => {
@@ -22,6 +22,29 @@ describe("progress", () => {
     expect(exitProgress(0.8)).toBeCloseTo(0, 5);
     expect(exitProgress(1)).toBeCloseTo(1, 5);
   });
+  // ── B1 到站減速曲線 ──
+  it("stationEase: 整數點恆等(jumpTo 的線性目標才會落在停站窗口正中)", () => {
+    for (let i = 0; i <= 5; i++) expect(stationEase(i)).toBeCloseTo(i, 10);
+  });
+  it("stationEase: 單調不減(倒著捲就是倒著開,不能有折返)", () => {
+    let prev = -Infinity;
+    for (let k = 0; k <= 500; k++) {
+      const v = stationEase(k / 100);
+      expect(v).toBeGreaterThanOrEqual(prev - 1e-12);
+      prev = v;
+    }
+  });
+  it("stationEase: 整數點兩側導數趨近 0(停站窗口內完全靜止)", () => {
+    const h = DWELL / 2; // 取樣點仍在停站窗口內
+    for (let i = 1; i <= 4; i++) {
+      expect(Math.abs(stationEase(i + h) - stationEase(i)) / h).toBeLessThan(0.01);
+      expect(Math.abs(stationEase(i) - stationEase(i - h)) / h).toBeLessThan(0.01);
+    }
+  });
+  it("stationEase: 中點對稱(巡航段的正中央不偏移)", () => {
+    for (let i = 0; i <= 4; i++) expect(stationEase(i + 0.5)).toBeCloseTo(i + 0.5, 10);
+  });
+
   it("stationAt maps ride progress to station index", () => {
     expect(stationAt(0, 6).index).toBe(0);
     expect(stationAt(0.99, 6).index).toBe(5);

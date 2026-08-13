@@ -21,6 +21,15 @@ export function rideProgress(p: number) {
 export function exitProgress(p: number) {
   return clamp((p - PHASE.rideEnd) / (1 - PHASE.rideEnd));
 }
+// 到站減速曲線:把「等速掠過六站」改成「起步 → 巡航 → 減速 → 停住」。
+// 每段(相鄰兩站之間)的前後各 DWELL 完全靜止 —— 靜止不是視覺裝飾,而是讓資訊卡的
+// 可讀期間 = 停站期間;中段用 smoothstep,兩端導數為 0,所以起步與煞停都沒有硬轉折。
+// 整數點恆等(stationEase(i) === i)是關鍵性質:jumpTo 的線性目標剛好落在停站窗口正中。
+export const DWELL = 0.15;
+export function stationEase(x: number) {
+  const i = Math.floor(x);
+  return i + smooth(clamp((x - i - DWELL) / (1 - 2 * DWELL)));
+}
 export function stationAt(rp: number, n: number) {
   const x = clamp(rp) * (n - 1);
   return { index: Math.round(x), local: x - Math.floor(x) };

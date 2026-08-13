@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { STATIONS } from "@/content/stations";
-import { phaseOf, doorProgress, rideProgress, exitProgress, lerpGrade, clamp, smooth, PHASE } from "@/lib/progress";
+import { phaseOf, doorProgress, rideProgress, exitProgress, lerpGrade, clamp, smooth, stationEase, PHASE } from "@/lib/progress";
 import { CabinComposite } from "./CabinComposite";
 import { Door3D } from "./Door3D";
 import { StationPanel } from "./StationPanel";
@@ -41,8 +41,10 @@ export function ScrollJourney() {
   const wrap = useRef<HTMLDivElement>(null);
   const stage = useRef<HTMLDivElement>(null);
   const sway = useRef<HTMLDivElement>(null);
+  const camera = useRef<HTMLDivElement>(null); // A6:玻璃視差的 CSS 變數掛在這層,往下傳給每扇窗
   const phaseRef = useRef<"gate" | "ride" | "exit">("gate");
   const doorRef = useRef(0); // 給 sway 迴圈:門開完才開始跟滑鼠,交棒瞬間位移趨近 0
+  const distRef = useRef(1); // 給 sway 迴圈:eased 的到站距離,底噪靠它在停站時收斂到 0
   const [p, setP] = useState(0);
   const [narrow, setNarrow] = useState(false); // 手機:轉場退化為 2.5D
 
@@ -82,31 +84,73 @@ export function ScrollJourney() {
   }, []);
 
   // 滑鼠視差晃動(只在 ride 生效;gate/exit 平滑收斂回 0,不與相機動畫打架)
+  // + A1 行進底噪:疊在同一個 rAF 裡(每幀多四個 sin),不開第二條迴圈 —— 手機的每幀預算
+  //   是這頁最緊的資源,而且兩個迴圈各自寫同一個 transform 必然互相蓋掉。
   useEffect(() => {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    // reduced-motion 要能「中途切換」生效:掛 change,不是 mount 時查一次就算了。
+    const mqReduce = window.matchMedia("(prefers-reduced-motion: reduce)");
+    // 有沒有滑鼠用能力查詢判斷,不用寬度猜 —— iPad 外接滑鼠、觸控筆電都會被寬度誤判。
+    const mqFine = window.matchMedia("(hover: hover) and (pointer: fine)");
+    let reduced = mqReduce.matches;
+    let fine = mqFine.matches;
+    const onReduce = () => { reduced = mqReduce.matches; };
+    const onFine = () => { fine = mqFine.matches; };
+    mqReduce.addEventListener("change", onReduce);
+    mqFine.addEventListener("change", onFine);
+    // 分頁切走時 rAF 會被節流但不保證停;明確關掉,回來才不會接在「時間跳了好幾秒」的相位上抖一下。
+    let visible = !document.hidden;
+    const onVis = () => { visible = !document.hidden; };
+    document.addEventListener("visibilitychange", onVis);
+
     const target = { x: 0, y: 0 };
     const cur = { x: 0, y: 0 };
+    let gate = 0; // 底噪的開關也要平滑:硬切 0↔1 會在進出 ride 的那一幀憑空跳掉 2px
     const onMove = (e: PointerEvent) => {
       target.x = (e.clientX / window.innerWidth - 0.5) * 2;
       target.y = (e.clientY / window.innerHeight - 0.5) * 2;
     };
     let raf = 0;
-    const tick = () => {
-      const active = phaseRef.current === "ride" && doorRef.current >= 1;
+    const tick = (now: number) => {
+      const active = phaseRef.current === "ride" && doorRef.current >= 1 && visible && !reduced;
       const tgx = active ? target.x : 0, tgy = active ? target.y : 0;
       cur.x += (tgx - cur.x) * 0.06;
       cur.y += (tgy - cur.y) * 0.06;
+      gate += ((active ? 1 : 0) - gate) * 0.06;
+      // 到站收斂:eased dist 在停站窗口是 0 → calm=1 → 振幅歸零。
+      // 這就是 B4「停穩」的觸覺證據 —— 車真的停了,不是只有卡片浮出來。
+      const calm = smooth(clamp((0.15 - distRef.current) / 0.15));
+      const amp = gate * (1 - calm);
+      // 兩個不成比例的頻率疊在一起,週期長到讀不出規律 ——「讀不出在動,只讀得出不是靜止」。
+      // 垂直上限 1.5px:sway 那層的過掃描餘裕只有 ~14.5px,滑鼠已經吃掉 12px。
+      const t = now / 1000;
+      const nx = ((Math.sin(t * 1.3) + 0.5 * Math.sin(t * 3.7)) / 1.5) * 2.0 * amp;
+      const ny = ((Math.sin(t * 1.7) + 0.6 * Math.sin(t * 2.9)) / 1.6) * 1.5 * amp;
+      const nr = Math.sin(t * 1.1) * 0.08 * amp;
       const el = sway.current;
       if (el) {
-        const tx = -cur.x * 15, ty = -cur.y * 12;
+        const tx = -cur.x * 15 + nx, ty = -cur.y * 12 + ny;
         const ry = cur.x * 1.4, rx = -cur.y * 1.1;
-        el.style.transform = `translate3d(${tx.toFixed(2)}px, ${ty.toFixed(2)}px, 0) rotateX(${rx.toFixed(2)}deg) rotateY(${ry.toFixed(2)}deg) scale(1.035)`;
+        el.style.transform = `translate3d(${tx.toFixed(2)}px, ${ty.toFixed(2)}px, 0) rotateX(${rx.toFixed(2)}deg) rotateY(${ry.toFixed(2)}deg) rotate(${nr.toFixed(3)}deg) scale(1.035)`;
+      }
+      // A6:玻璃比景多動 ±3.5px(近的東西動得多)。觸控裝置恆 0 —— 沒有游標就沒有視角,
+      // 但靜態反光層留著,那是玻璃的實體感,不是互動。
+      const cam = camera.current;
+      if (cam) {
+        const gx = fine ? -cur.x * 3.5 : 0, gy = fine ? -cur.y * 3.5 : 0;
+        cam.style.setProperty("--glass-x", `${gx.toFixed(2)}px`);
+        cam.style.setProperty("--glass-y", `${gy.toFixed(2)}px`);
       }
       raf = requestAnimationFrame(tick);
     };
     window.addEventListener("pointermove", onMove);
     raf = requestAnimationFrame(tick);
-    return () => { window.removeEventListener("pointermove", onMove); cancelAnimationFrame(raf); };
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      document.removeEventListener("visibilitychange", onVis);
+      mqReduce.removeEventListener("change", onReduce);
+      mqFine.removeEventListener("change", onFine);
+      cancelAnimationFrame(raf);
+    };
   }, []);
 
   const { t } = useLang();
@@ -116,9 +160,12 @@ export function ScrollJourney() {
   const doorP = doorProgress(p);
   doorRef.current = doorP;
   const rp = rideProgress(p);
-  const x = rp * (n - 1);
+  // eased x 是唯一的列車座標:index / dist / pan / grade 全部吃它。
+  // 留兩套(線性一套、eased 一套)會讓「卡片浮出來」和「車停下來」對不上,那正是要修的東西。
+  const x = stationEase(rp * (n - 1));
   const index = Math.round(clamp(x, 0, n - 1));
   const dist = Math.abs(x - index);
+  distRef.current = dist;
   const lo = STATIONS[Math.floor(x)];
   const hi = STATIONS[Math.min(Math.ceil(x), n - 1)];
   const grade = lerpGrade(lo.grade, hi.grade, x - Math.floor(x));
@@ -126,8 +173,12 @@ export function ScrollJourney() {
 
   // 到站相機動畫(第一人稱起身 + 轉身):e 0→1
   const e = phase === "exit" ? exitProgress(p) : 0;
-  const rise = smooth(clamp(e / 0.45)); // 起身:e 0→0.45
-  const turn = smooth(clamp((e - 0.35) / 0.65)); // 轉身:e 0.35→1
+  // 分成兩個讀得出來的動作:起身 → 半拍 → 轉身。
+  // 舊值 rise 0–0.45 與 turn 0.35–1 有 0.1 的重疊,人還沒站直就開始轉,兩個動作糊成一個。
+  // 「停穩」不在這裡寫 —— A1 的 calm 在終點站已經把底噪收乾淨了。
+  const rise = smooth(clamp(e / 0.40)); // 起身:e 0→0.40
+  // e 0.40–0.48 是刻意的半拍:什麼都不動,身體定住,轉身才有起點
+  const turn = smooth(clamp((e - 0.48) / 0.52)); // 轉身:e 0.48→1
   const camTransform = narrow
     ? // 手機 2.5D:起身 + 橫向滑出(輕微轉),省去重 3D rotateY
       `translateY(${(rise * 7).toFixed(2)}vh) scale(${(1 + rise * 0.1).toFixed(3)}) translateX(${(turn * -72).toFixed(2)}vw) rotateY(${(turn * -22).toFixed(2)}deg)`
@@ -138,7 +189,10 @@ export function ScrollJourney() {
   const camFilter = turn > 0 ? `blur(${(turn * 4).toFixed(2)}px)` : "none";
   const introOpacity = smooth(clamp((e - 0.55) / 0.4)); // concourse hero 轉入淡入
 
-  // 跳到第 i 站(路線圖點擊)。下限 doorEnd:跳站不要落在半開的車門裡
+  // 跳到第 i 站(路線圖點擊)。下限 doorEnd:跳站不要落在半開的車門裡。
+  // 這裡**刻意不做 stationEase 的反函式**:線性目標 i/(n-1) 對應到 rp*(n-1) = i(整數),
+  // 而 stationEase(整數) === 整數,所以落點正是停站窗口的正中間 —— 反函式反而會把人
+  // 丟到窗口邊緣。B1 之後這段維持原樣是正確的,不是漏改。
   const jumpTo = (i: number) => {
     if (!wrap.current) return;
     const r = n > 1 ? i / (n - 1) : 0;
@@ -171,6 +225,7 @@ export function ScrollJourney() {
         )}
         {showRide && (
           <div
+            ref={camera}
             className="camera"
             style={{ position: "absolute", inset: 0, transformStyle: "preserve-3d", transformOrigin: "center 82%", transform: camTransform, opacity: camOpacity, filter: camFilter, willChange: "transform, opacity" }}
           >
