@@ -75,10 +75,20 @@ function mixRgba(a: string, b: string, t: number) {
   const l = (x: number, y: number) => Math.round(x + (y - x) * t);
   return `rgba(${l(ar, br)},${l(ag, bg)},${l(ab, bb)},${(aa + (ba - aa) * t).toFixed(3)})`;
 }
+const lerp = (x: number, y: number, t: number) => x + (y - x) * t;
+// 三個數字全部線性插值 —— 「車內燈光隨窗外光線改變」是這個專案的招牌機制,階梯狀跳變
+// 會讓機制露餡。舊版只有顏色是真插值,filter / blend 在 t=0.5 硬切,靠 CSS transition
+// 追趕 0.8s(而且跟 scrub 打架)。blend 已統一成 GRADE_BLEND,不再需要插值。
 export function lerpGrade(a: Grade, b: Grade, t: number): Grade {
   return {
-    filter: t < 0.5 ? a.filter : b.filter,
-    grade: mixRgba(a.grade, b.grade, t),
-    blend: t < 0.5 ? a.blend : b.blend,
+    brightness: lerp(a.brightness, b.brightness, t),
+    saturate: lerp(a.saturate, b.saturate, t),
+    contrast: lerp(a.contrast ?? 1, b.contrast ?? 1, t),
+    tint: mixRgba(a.tint, b.tint, t),
   };
+}
+// 數值 → CSS filter 字串。contrast 等於 1 就不輸出(少一個 filter function 少一次合成)。
+export function gradeFilter(g: Grade): string {
+  const c = g.contrast ?? 1;
+  return `brightness(${g.brightness.toFixed(3)}) saturate(${g.saturate.toFixed(3)})${c === 1 ? "" : ` contrast(${c.toFixed(3)})`}`;
 }

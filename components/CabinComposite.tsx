@@ -1,8 +1,8 @@
 "use client";
-import { WIN, LED_RECT } from "@/lib/progress";
+import { WIN, LED_RECT, gradeFilter } from "@/lib/progress";
 import { Window } from "./Window";
 import { LedSign } from "./LedSign";
-import type { SceneType, Grade } from "@/content/stations";
+import { GRADE_BLEND, type SceneType, type Grade } from "@/content/stations";
 
 // A5 隧道段的所有覆蓋層參數。全部由 eased x 插值(見 ScrollJourney),不由時間 —— 所以
 // 倒著捲就是倒著出洞。null = 不在隧道區間,整組 DOM 不掛(巡航段零合成層成本)。
@@ -38,10 +38,12 @@ export function CabinComposite({
       <img
         src="/cabin.jpg"
         alt="EMU900 車廂內裝 · EMU900 train interior"
-        style={{ width: "100%", height: "auto", display: "block", filter: grade.filter, transition: "filter .8s ease" }}
+        style={{ width: "100%", height: "auto", display: "block", filter: gradeFilter(grade) }}
       />
+      {/* 沒有 transition:grade 已經是逐幀連續插值(lerpGrade),再加 .8s 追趕只會跟 scrub
+          打架 —— 捲動停下後燈光還要自己再飄 0.8 秒,那正是「燈光跟不上窗景」的來源。 */}
       <div
-        style={{ position: "absolute", inset: 0, pointerEvents: "none", background: grade.grade, mixBlendMode: grade.blend as React.CSSProperties["mixBlendMode"], transition: "background .8s ease" }}
+        style={{ position: "absolute", inset: 0, pointerEvents: "none", background: grade.tint, mixBlendMode: GRADE_BLEND as React.CSSProperties["mixBlendMode"] }}
       />
       {/* 隧道的兩層「車內光」擺在窗**之前**:光帶掃的是車廂內壁,不該把壓暗的窗景又提亮。
           用 % / inset 定位,直式 cover 裁切下位置自然跟著對(不寫死 px)。 */}

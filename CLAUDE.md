@@ -13,7 +13,7 @@
 ```bash
 npm run dev     # localhost:3000（也綁 0.0.0.0，手機可連區網 IP）
 npm run build   # 產品建置
-npm test        # vitest run（12 tests）
+npm test        # vitest run（25 tests）
 npx tsc --noEmit
 ```
 
@@ -126,8 +126,8 @@ content/stations.ts     六站全部內容(雙語)。改文案只動這裡
 
 完整清單見 `docs/design-audit-2026-07.md`（約 60 項，排序過）。最高優先的四項：
 
-1. **亮站對比崩壞** — `taipei` 站 `brightness(1.5)` 把玻璃卡帶成近白，`--muted` 對比只有 1.8:1、`--amber` 1.05:1（§1.2）
-2. **六站燈光曲線** — 主題叫「夜車」但中間插了一個正午；且 grade overlay 在 DOM 上位於車窗下方 → 車內比車外亮，光線關係是反的（§3.1）
+1. ~~**六站燈光曲線**（§3.1 + §3.2）~~ — **已修**：曲線重排成「傍晚出發、天亮到站」（`taipei` 1.5 的正午 → 0.86 的夜間台北 101 點燈、`field` golden hour → 凌晨 blue hour），`Grade` 改數值型別逐幀連續插值、六站 blend 統一 `soft-light`。曲線與規則見 DESIGN.md §1
+2. **亮站對比**（§1.2）— 已大幅緩解但未全解：28 個量測點中 < 3:1 的從 12 個降到 5 個（`taipei` 站從「7 項全掛」變成 4 項過 AA）。**剩下的不是 grade 的問題**，是資訊卡壓在 `cabin.jpg` 的淺藍座椅上：`--muted` 在 `city` 1.80:1、`--amber` 在 `sea` 2.06:1。要做 scrim 才會過
 3. **SSR HTML 沒有 `<h1>`**，四個作品站的內容爬蟲完全看不到（§1.3）
 4. **三個專案零個可驗證連結** — `links` 的型別/CSS/渲染邏輯全寫好了但沒資料（§7.3）
 

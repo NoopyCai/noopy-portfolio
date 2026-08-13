@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { phaseOf, doorProgress, rideProgress, exitProgress, exitDoorProgress, tunnelProgress, stationAt, lerpGrade, stationEase, DWELL, PHASE, EXIT_DOOR, TUNNEL } from "./progress";
-import type { Grade } from "@/content/stations";
+import { phaseOf, doorProgress, rideProgress, exitProgress, exitDoorProgress, tunnelProgress, stationAt, lerpGrade, gradeFilter, stationEase, DWELL, PHASE, EXIT_DOOR, TUNNEL } from "./progress";
+import { STATIONS, type Grade } from "@/content/stations";
 
 describe("progress", () => {
   it("phaseOf: gate / ride / exit", () => {
@@ -82,11 +82,37 @@ describe("progress", () => {
     expect(stationAt(0, 6).index).toBe(0);
     expect(stationAt(0.99, 6).index).toBe(5);
   });
-  it("lerpGrade blends grade colour and switches filter at midpoint", () => {
-    const a: Grade = { filter: "brightness(1)", grade: "rgba(0,0,0,0)", blend: "soft-light" };
-    const b: Grade = { filter: "brightness(2)", grade: "rgba(100,100,100,1)", blend: "screen" };
-    expect(lerpGrade(a, b, 0).filter).toBe("brightness(1)");
-    expect(lerpGrade(a, b, 1).filter).toBe("brightness(2)");
-    expect(lerpGrade(a, b, 0.5).grade).toBe("rgba(50,50,50,0.500)");
+  // ── 燈光 grade 的連續插值(audit §3.2)──
+  const gA: Grade = { brightness: 1, saturate: 1, tint: "rgba(0,0,0,0)" };
+  const gB: Grade = { brightness: 2, saturate: 1.5, contrast: 1.2, tint: "rgba(100,100,100,1)" };
+  it("lerpGrade:三個數字與 tint 全部線性插值(不再有中點硬切)", () => {
+    const m = lerpGrade(gA, gB, 0.5);
+    expect(m.brightness).toBeCloseTo(1.5, 10);
+    expect(m.saturate).toBeCloseTo(1.25, 10);
+    expect(m.contrast).toBeCloseTo(1.1, 10); // 缺省的 contrast 當作 1
+    expect(m.tint).toBe("rgba(50,50,50,0.500)");
+  });
+  it("lerpGrade:端點恆等,且 brightness 沿 t 單調連續(掃 200 格不得有跳階)", () => {
+    expect(lerpGrade(gA, gB, 0).brightness).toBeCloseTo(gA.brightness, 10);
+    expect(lerpGrade(gA, gB, 1).brightness).toBeCloseTo(gB.brightness, 10);
+    let prev = lerpGrade(gA, gB, 0).brightness;
+    for (let k = 1; k <= 200; k++) {
+      const v = lerpGrade(gA, gB, k / 200).brightness;
+      expect(v - prev).toBeGreaterThan(0);            // 嚴格遞增
+      expect(v - prev).toBeLessThan(0.02);            // 每格的變化都很小 = 沒有硬切
+      prev = v;
+    }
+  });
+  it("gradeFilter:contrast 等於 1 就不輸出", () => {
+    expect(gradeFilter(gA)).toBe("brightness(1.000) saturate(1.000)");
+    expect(gradeFilter(gB)).toBe("brightness(2.000) saturate(1.500) contrast(1.200)");
+  });
+  it("六站的實際 grade 在轉場中都不會產生負值或爆亮", () => {
+    for (let i = 0; i < STATIONS.length - 1; i++)
+      for (let k = 0; k <= 20; k++) {
+        const g = lerpGrade(STATIONS[i].grade, STATIONS[i + 1].grade, k / 20);
+        expect(g.brightness).toBeGreaterThan(0.5);
+        expect(g.brightness).toBeLessThanOrEqual(1.06);
+      }
   });
 });

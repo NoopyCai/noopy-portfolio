@@ -8,7 +8,14 @@ export type StationId =
   | "ai"
   | "skills"
   | "terminal";
-export type Grade = { filter: string; grade: string; blend: string };
+// 燈光 grade:數值而非字串,因為它要被 lerpGrade 逐幀連續插值(字串只能在中點硬切,
+// 那就是換站跳閃的來源)。filter 字串由 lib/progress.ts 的 gradeFilter() 組出來。
+// contrast 選用(省略 = 1);目前六站都不需要,型別與插值邏輯留著等真的用得上那天。
+export type Grade = { brightness: number; saturate: number; contrast?: number; tint: string };
+// 六站統一的混合模式。一個燈光系統不該有三種合成模式 —— 舊版 multiply/screen/soft-light
+// 混用,river(multiply 壓暗)→ taipei(screen 提亮)在轉場中點會直接彈一下(audit §3.2)。
+// 要壓暗就把 tint 調暗、要提亮就調 brightness。
+export const GRADE_BLEND = "soft-light";
 export type Link = { label: string; href: string };
 export type PanelData = {
   kind: "hero" | "project" | "skills" | "contact";
@@ -42,7 +49,8 @@ export const STATIONS: Station[] = [
     scene: "platform",
     name: { zh: "月台・出發", en: "Platform" },
     led: { zh: "本次列車即將出發 · 車門關閉", en: "This service is departing · doors closing" },
-    grade: { filter: "brightness(1) saturate(1)", grade: "rgba(120,150,190,0.16)", blend: "soft-light" },
+    // 傍晚月台:冷藍,但月台燈池本身是暖的(場景裡畫的)。整條曲線的起點。
+    grade: { brightness: 0.95, saturate: 1, tint: "rgba(120,150,190,0.16)" },
     panel: {
       kind: "hero",
       title: { zh: "蔡守傑 NoopyCai", en: "NoopyCai" },
@@ -61,7 +69,8 @@ export const STATIONS: Station[] = [
     scene: "city",
     name: { zh: "電商推薦系統", en: "Recommendation System" },
     led: { zh: "下一站 電商推薦系統", en: "Next stop · Recommendation System" },
-    grade: { filter: "brightness(1.06) saturate(1.12)", grade: "rgba(255,140,50,0.30)", blend: "soft-light" },
+    // 黃昏市郊:全程唯一的暖亮峰,天黑之前最後一段有色溫的光。
+    grade: { brightness: 1.05, saturate: 1.12, tint: "rgba(255,140,50,0.30)" },
     panel: {
       kind: "project",
       title: { zh: "電商推薦系統", en: "Recommendation Engine" },
@@ -88,7 +97,8 @@ export const STATIONS: Station[] = [
     scene: "river",
     name: { zh: "LINE LIFF 會員綁定", en: "LINE LIFF Binding" },
     led: { zh: "下一站 LINE LIFF 會員綁定", en: "Next stop · LINE LIFF Binding" },
-    grade: { filter: "brightness(0.72) saturate(0.85)", grade: "rgba(30,60,120,0.34)", blend: "multiply" },
+    // 深夜跨河:曲線的谷底。舊版靠 multiply 壓暗,改 soft-light 後改由 brightness 壓。
+    grade: { brightness: 0.72, saturate: 0.85, tint: "rgba(30,60,120,0.34)" },
     panel: {
       kind: "project",
       title: { zh: "LINE LIFF × Magento2 會員綁定", en: "LINE LIFF × Magento2 Binding" },
@@ -114,7 +124,9 @@ export const STATIONS: Station[] = [
     scene: "taipei",
     name: { zh: "AI 工具整合", en: "AI Automation" },
     led: { zh: "下一站 AI 工具整合 · 台北", en: "Next stop · AI Automation · Taipei" },
-    grade: { filter: "brightness(1.5) contrast(1.05) saturate(0.95)", grade: "rgba(205,225,245,0.18)", blend: "screen" },
+    // 深夜台北:城市光害讓它比跨河那段微亮一點,但仍然是夜。舊版 brightness(1.5) + screen
+    // 是全站最嚴重的對比崩壞來源,也是夜車敘事被打斷的地方(audit §1.2 / §3.1)。
+    grade: { brightness: 0.86, saturate: 1.05, tint: "rgba(60,90,150,0.28)" },
     panel: {
       kind: "project",
       title: { zh: "AI 工具整合", en: "AI Automation Toolkit" },
@@ -139,7 +151,8 @@ export const STATIONS: Station[] = [
     scene: "field",
     name: { zh: "技能車廂", en: "Tech Stack" },
     led: { zh: "技能車廂 · Frontend / Backend / Data / AI", en: "Skills car · Frontend / Backend / Data / AI" },
-    grade: { filter: "brightness(1.08) saturate(1.15)", grade: "rgba(255,170,70,0.24)", blend: "soft-light" },
+    // 凌晨田野(blue hour):黎明前最暗的一段,只有零星農舍燈火。技能站放在這裡有隱喻。
+    grade: { brightness: 0.8, saturate: 0.9, tint: "rgba(48,76,120,0.30)" },
     panel: {
       kind: "skills",
       title: { zh: "技術棧", en: "Tech Stack" },
@@ -157,7 +170,8 @@ export const STATIONS: Station[] = [
     scene: "sea",
     name: { zh: "終點站・聯絡", en: "Terminal · Contact" },
     led: { zh: "終點站 到了 · 感謝搭乘", en: "Terminal · thanks for riding" },
-    grade: { filter: "brightness(1.03) saturate(1.05)", grade: "rgba(255,150,170,0.22)", blend: "soft-light" },
+    // 破曉海景:唯一的亮結尾。捲到底 = 搭了一夜車、天亮了。
+    grade: { brightness: 1.03, saturate: 1.05, tint: "rgba(255,150,170,0.22)" },
     panel: {
       kind: "contact",
       title: { zh: "抵達終點・保持聯絡", en: "End of the line · let's talk" },
