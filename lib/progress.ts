@@ -21,6 +21,28 @@ export function rideProgress(p: number) {
 export function exitProgress(p: number) {
   return clamp((p - PHASE.rideEnd) / (1 - PHASE.rideEnd));
 }
+// 出站的門(E1):轉身完成後,車門在**身後**關上 —— 進站那扇門的反放。
+// e 0.62 起淡入(此時 .camera 正好淡出),0.95 完全閉合;0.80–1.0 大廳 hero 疊上來,
+// 「門關 = 簾幕落下」。這段刻意早於 e=1 結束:最後 5% 留給 hero 獨自佔滿畫面。
+export const EXIT_DOOR = { start: 0.62, end: 0.95 } as const;
+export function exitDoorProgress(p: number) {
+  return clamp((exitProgress(p) - EXIT_DOOR.start) / (EXIT_DOOR.end - EXIT_DOOR.start));
+}
+
+// A5 隧道段:LIFF(x=2)→ AI(x=3) 的巡航段正中央,以 **eased x** 定義(唯一座標)。
+// 上界由資訊卡決定:卡片的隱藏區間是 dist > 0.34 ⇒ x ∈ [2.34, 2.66],隧道必須完全落在
+// 其內,讀卡片的時候才不會突然變暗。所以 [2.36, 2.64] 已經是「不撞到卡片」的極限,
+// 兩端各留 0.02 的餘裕。
+// 下界由「讀得出來是隧道」決定:這段在 eased x 空間只有 0.28,但它落在減速曲線最快的
+// 巡航段(dx/dscroll ≈ 2.14),換算成實際捲動只有 **~126px**。spec 原本的 [2.42, 2.58]
+// 更只有 71px —— 不到一個滾輪格,整段隧道會變成一次閃光。真機驗手感若還是太短,
+// 問題在 TOTAL_LEN 寫死(audit §8.4),不是這兩個數字還能再擠。
+export const TUNNEL = { from: 2.36, to: 2.64 } as const;
+// 回傳 0→1 的洞內進度。區間外回 0 / 1,而分段曲線在兩端都收斂成「什麼都沒發生」,
+// 所以呼叫端不需要另外判斷在不在洞裡(仍然會 gate 掉 DOM,見 ScrollJourney)。
+export function tunnelProgress(x: number) {
+  return clamp((x - TUNNEL.from) / (TUNNEL.to - TUNNEL.from));
+}
 // 到站減速曲線:把「等速掠過六站」改成「起步 → 巡航 → 減速 → 停住」。
 // 每段(相鄰兩站之間)的前後各 DWELL 完全靜止 —— 靜止不是視覺裝飾,而是讓資訊卡的
 // 可讀期間 = 停站期間;中段用 smoothstep,兩端導數為 0,所以起步與煞停都沒有硬轉折。

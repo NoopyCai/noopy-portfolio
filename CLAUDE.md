@@ -62,7 +62,7 @@ content/stations.ts     六站全部內容(雙語)。改文案只動這裡
 | `ride` | 0.22 → 0.8 | 車廂 + 六站（`rideProgress` 從 doorEnd 起算，門開完剛好停在第一站） |
 | `exit` | 0.8 → 1 | 第一人稱起身 + 轉身，尾段淡出交棒給 Concourse |
 
-門過場是**真的 3D 場景**（`components/Door3D.tsx` + `components/door3d/`）：three.js、一台 `PerspectiveCamera(50°)`、月台在門外、cabin.jpg 貼在門後 `z = -8` 的背板上。門板/車體/月台地面貼的是 `public/door/*.jpg`（使用者以 `docs/ai-illustration-prompts.md` §D 的 prompt 自行 AI 生成，共 444 KB；`textures.ts` 的程序繪製版是載入失敗時的 runtime fallback，**不可刪**）。材質亮度靠 `EXPOSURE` 常數做曝光補償（`color.setScalar`，材質層級）——燈光與 emissive 不動。**換圖後必須重量三個對位數字**（門縫 x、綠帶 v、導盲磚 v），量法見 prompts 文件 §D。分鏡全部由 `doorP` 插值，**沒有 delta time、沒有常駐 rAF**，所以倒著捲就是倒著關：
+門過場是**真的 3D 場景**（`components/Door3D.tsx` + `components/door3d/`）：three.js、一台 `PerspectiveCamera(50°)`、月台在門外、cabin.jpg 貼在門後 `z = -8` 的背板上。門板/車體/月台地面貼的是 `public/door/*.jpg`（使用者以 `docs/ai-illustration-prompts.md` §D 的 prompt 自行 AI 生成，共 518 KB；`textures.ts` 的程序繪製版是載入失敗時的 runtime fallback，**不可刪**）。材質亮度靠 `EXPOSURE` 常數做曝光補償（`color.setScalar`，材質層級）——燈光與 emissive 不動。**換圖後必須重量三個對位數字**（門縫 x、綠帶 v、導盲磚 v）＋ car-body 的標語橫向相位 `CAR_U0`，量法見 prompts 文件 §D。分鏡全部由 `doorP` 插值，**沒有 delta time、沒有常駐 rAF**，所以倒著捲就是倒著關：
 
 | doorP | 這一拍 | 實作 |
 |---|---|---|

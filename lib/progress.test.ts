@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { phaseOf, doorProgress, rideProgress, exitProgress, stationAt, lerpGrade, stationEase, DWELL } from "./progress";
+import { phaseOf, doorProgress, rideProgress, exitProgress, exitDoorProgress, tunnelProgress, stationAt, lerpGrade, stationEase, DWELL, PHASE, EXIT_DOOR, TUNNEL } from "./progress";
 import type { Grade } from "@/content/stations";
 
 describe("progress", () => {
@@ -22,6 +22,39 @@ describe("progress", () => {
     expect(exitProgress(0.8)).toBeCloseTo(0, 5);
     expect(exitProgress(1)).toBeCloseTo(1, 5);
   });
+  // ── E1 出站的門 ──
+  const pOf = (e: number) => PHASE.rideEnd + e * (1 - PHASE.rideEnd); // e → 全域 progress
+  it("exitDoorProgress: ride 期間恆 0(門只在出站才存在)", () => {
+    expect(exitDoorProgress(0.5)).toBe(0);
+    expect(exitDoorProgress(PHASE.rideEnd)).toBe(0);
+    expect(exitDoorProgress(pOf(0.5))).toBe(0); // 起身/半拍/轉身期間門還沒淡入
+  });
+  it("exitDoorProgress: e 0.62 → 0、0.95 → 1、之後恆 1(門關上就不再動)", () => {
+    expect(exitDoorProgress(pOf(EXIT_DOOR.start))).toBeCloseTo(0, 10);
+    expect(exitDoorProgress(pOf((EXIT_DOOR.start + EXIT_DOOR.end) / 2))).toBeCloseTo(0.5, 10);
+    expect(exitDoorProgress(pOf(EXIT_DOOR.end))).toBeCloseTo(1, 10);
+    expect(exitDoorProgress(1)).toBe(1);
+  });
+  it("exitDoorProgress: 單調不減(倒著捲門就重新打開,不能有折返)", () => {
+    let prev = -Infinity;
+    for (let k = 0; k <= 200; k++) {
+      const v = exitDoorProgress(k / 200);
+      expect(v).toBeGreaterThanOrEqual(prev - 1e-12);
+      prev = v;
+    }
+  });
+
+  // ── A5 隧道段 ──
+  it("tunnelProgress: 區間端點 0/1,且完全落在資訊卡的隱藏區間(dist > 0.34)內", () => {
+    expect(tunnelProgress(TUNNEL.from)).toBeCloseTo(0, 10);
+    expect(tunnelProgress(TUNNEL.to)).toBeCloseTo(1, 10);
+    expect(tunnelProgress(2.0)).toBe(0); // 站上不在洞裡
+    expect(tunnelProgress(3.0)).toBe(1); // 出洞後仍是 1(曲線兩端都收斂成「沒事發生」)
+    // 卡片在 dist > 0.34 才隱藏 ⇒ 可讀區間是 x ∈ [2, 2.34] ∪ [2.66, 3]
+    expect(TUNNEL.from).toBeGreaterThan(2.34);
+    expect(TUNNEL.to).toBeLessThan(2.66);
+  });
+
   // ── B1 到站減速曲線 ──
   it("stationEase: 整數點恆等(jumpTo 的線性目標才會落在停站窗口正中)", () => {
     for (let i = 0; i <= 5; i++) expect(stationEase(i)).toBeCloseTo(i, 10);

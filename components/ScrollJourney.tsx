@@ -3,8 +3,8 @@ import { useEffect, useRef, useState } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { STATIONS } from "@/content/stations";
-import { phaseOf, doorProgress, rideProgress, exitProgress, lerpGrade, clamp, smooth, stationEase, PHASE } from "@/lib/progress";
-import { CabinComposite } from "./CabinComposite";
+import { phaseOf, doorProgress, rideProgress, exitProgress, exitDoorProgress, tunnelProgress, lerpGrade, clamp, smooth, stationEase, PHASE, TUNNEL, EXIT_DOOR } from "@/lib/progress";
+import { CabinComposite, type TunnelFx } from "./CabinComposite";
 import { Door3D } from "./Door3D";
 import { StationPanel } from "./StationPanel";
 import { RouteMap } from "./RouteMap";
@@ -171,6 +171,33 @@ export function ScrollJourney() {
   const grade = lerpGrade(lo.grade, hi.grade, x - Math.floor(x));
   const cur = STATIONS[index];
 
+  // B2 月台進站:中央窗第二層的不透明度。dist 是 eased 的 → 減速曲線免費繼承,
+  // 月台隨列車減速滑進來、停站期間(dist 恆 0)定格不動。
+  // 第 0 站本來就是月台場景,再疊一層就是雙重月台。
+  const platform = index === 0 ? 0 : smooth(clamp((0.12 - dist) / 0.12));
+
+  // A5 隧道段(LIFF → AI 之間的巡航段中央)。u 是洞內進度,全部由 eased x 插值,
+  // 沒有任何時間項 —— 倒著捲就是倒著出洞,而亮度變化的頻率由使用者的捲速決定
+  // (最壞情況還有 scrub 0.5 幫忙平滑)。區間外整組 DOM 不掛:巡航段零合成層。
+  const u = tunnelProgress(x);
+  const inTunnel = phase === "ride" && x > TUNNEL.from && x < TUNNEL.to;
+  const enter = smooth(clamp(u / 0.15));         // 進洞 0–0.15
+  const leave = smooth(clamp((u - 0.85) / 0.15)); // 出洞 0.85–1
+  const tunnel: TunnelFx | null = inTunnel
+    ? {
+        dim: 0.94 * enter * (1 - leave),
+        // 洞口那道垂直暗帶只在進洞時掃過中央窗;方向跟著 pan(窗景往左流,牆從右邊來)
+        band: u < 0.16 ? 120 - 240 * enter : null,
+        lift: 0.05 * enter * (1 - leave),
+        // 光帶橫掃:一整段隧道剛好掃過一輪。刻意只有一輪 —— 這段換算成實際捲動只有
+        // ~126px,一格滾輪就掃完,兩輪以上在快速捲動下會逼近 WCAG 2.3.1 的 3Hz 紅線。
+        sweep: u * 50,
+        // 出洞回光:0.85 起快速亮到 0.12 再退回 0(spec 寫「0.12→0」,但直接從 0.12 起跳
+        // 會在 u=0.85 那一幀出現硬邊,所以前 5% 用來把它接上去)
+        flash: 0.12 * smooth(clamp((u - 0.85) / 0.05)) * (1 - smooth(clamp((u - 0.9) / 0.1))),
+      }
+    : null;
+
   // 到站相機動畫(第一人稱起身 + 轉身):e 0→1
   const e = phase === "exit" ? exitProgress(p) : 0;
   // 分成兩個讀得出來的動作:起身 → 半拍 → 轉身。
@@ -185,9 +212,19 @@ export function ScrollJourney() {
     : // 桌機真 3D:起身 + 轉身
       `translateY(${(rise * 9).toFixed(2)}vh) scale(${(1 + rise * 0.16).toFixed(3)}) ` +
       `rotateX(${(rise * 5).toFixed(2)}deg) rotateY(${(turn * -85).toFixed(2)}deg) translateX(${(turn * -14).toFixed(2)}vw)`;
-  const camOpacity = 1 - smooth(clamp((e - 0.72) / 0.28)); // 尾段淡出,交棒給 concourse
-  const camFilter = turn > 0 ? `blur(${(turn * 4).toFixed(2)}px)` : "none";
-  const introOpacity = smooth(clamp((e - 0.55) / 0.4)); // concourse hero 轉入淡入
+  // E1 重排的交棒窗口:.camera 在 e 0.62–0.75 淡出(正好是出站門淡入的那段),
+  // hero 則等到門快關上才浮出來(0.80–1.0)。三段刻意首尾相接而不重疊太多,
+  // 讀起來就是「轉身 → 門在身後關上 → 大廳亮起來」。
+  // 兩層**錯開**而不是等比對溶:車廂內裝與月台側的門是兩個不同的空間,50/50 疊在一起
+  // 是一張雙重曝光(實測截圖確認),讀起來像 bug 不像轉場。所以 .camera 先在 0.62–0.72
+  // 收乾,門再從 0.68 起浮上來 —— 中間那一小段幾乎全暗,語意剛好是「轉過身的那一瞬間」。
+  const camOpacity = 1 - smooth(clamp((e - EXIT_DOOR.start) / 0.10));
+  // §4.4:這裡原本有每幀的 filter: blur() —— 全視窗高斯模糊是這頁最貴的一筆,
+  // 手機上轉身兩端都在跑。空間感改由 rotateY/translateX/opacity + 出站的門承擔。
+  const introOpacity = smooth(clamp((e - 0.80) / 0.20)); // concourse hero 隨門閉合淡入
+  // 出站的門(E1)
+  const exitDoorP = exitDoorProgress(p);
+  const doorExitOn = phase === "exit" && e >= EXIT_DOOR.start - 0.02;
 
   // 跳到第 i 站(路線圖點擊)。下限 doorEnd:跳站不要落在半開的車門裡。
   // 這裡**刻意不做 stationEase 的反函式**:線性目標 i/(n-1) 對應到 rp*(n-1) = i(整數),
@@ -227,7 +264,9 @@ export function ScrollJourney() {
           <div
             ref={camera}
             className="camera"
-            style={{ position: "absolute", inset: 0, transformStyle: "preserve-3d", transformOrigin: "center 82%", transform: camTransform, opacity: camOpacity, filter: camFilter, willChange: "transform, opacity" }}
+            /* camOpacity 歸零之後這層已經看不見了,willChange 再留著只是白白佔一個
+               合成層(§4.4 的 will-change 收斂) */
+            style={{ position: "absolute", inset: 0, transformStyle: "preserve-3d", transformOrigin: "center 82%", transform: camTransform, opacity: camOpacity, willChange: camOpacity > 0 ? "transform, opacity" : "auto" }}
           >
             {/* 只有車廂進 sway 層:那層常駐 scale(1.035) 過掃描(讓 ±15px 平移不露邊),
                 而 will-change + preserve-3d 會讓整層先光柵化再 GPU 縮放 —— 文字和像素字型
@@ -236,7 +275,7 @@ export function ScrollJourney() {
               ref={sway}
               style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", placeContent: "center", transformStyle: "preserve-3d", willChange: "transform" }}
             >
-              <CabinComposite scene={cur.scene} grade={grade} ledText={t(cur.led)} pan={x} />
+              <CabinComposite scene={cur.scene} grade={grade} ledText={t(cur.led)} pan={x} platform={platform} tunnel={tunnel} />
             </div>
             <StationPanel station={cur} visible={phase === "ride" && doorP >= 1 && dist < 0.34} />
             {phase === "ride" && doorP >= 1 && <RouteMap index={index} onJump={jumpTo} />}
@@ -247,8 +286,15 @@ export function ScrollJourney() {
             canvas 自己淡出,DOM 車廂(活窗景 + 跑馬燈)透出來接手。
             **永遠掛載**,離開門區間只用 CSS 收成 display:none —— 條件式掛載會讓 WebGL
             context 隨著上下捲反覆建/毀,實測會整片白屏(詳見 Door3D 的註解)。
-            多留 0.02 的緩衝是為了讓 canvas 先淡到 0 再隱藏,不要在還看得見時消失。 */}
-        <Door3D progress={doorP} active={p < PHASE.doorEnd + 0.02} />
+            多留 0.02 的緩衝是為了讓 canvas 先淡到 0 再隱藏,不要在還看得見時消失。
+            同一個 canvas 也服務出站的門(E1,mode="exit"):進站是門開 + 推軌穿門,
+            出站是站在月台上看門關起來。**絕不能為了兩段門開兩個 canvas** —— 那就是
+            兩個 WebGL context,坑 10 的另一種寫法。 */}
+        <Door3D
+          progress={doorExitOn ? exitDoorP : doorP}
+          active={p < PHASE.doorEnd + 0.02 || doorExitOn}
+          mode={doorExitOn ? "exit" : "enter"}
+        />
         {phase === "exit" && (
           <div className="concourse-intro" style={{ opacity: introOpacity, pointerEvents: "none" }}>
             <div className="concourse-intro-inner"><ConcourseHero /></div>

@@ -65,6 +65,28 @@ a { color: var(--green); }
     radial-gradient(ellipse 30% 30% at 100% 4%, rgba(255, 255, 255, .03), transparent 70%);
 }
 
+/* 隧道段(A5)。全部只動 opacity / transform(合成層),而且全部由捲動的 u 驅動,
+   沒有任何 CSS animation —— 倒著捲要能倒著出洞,animation 做不到這件事。
+   位置一律 inset/%:直式手機的 cover 會把車廂裁掉一大塊,寫死 px 就跑到畫面外了。 */
+.win-dim { position: absolute; inset: 0; pointer-events: none; background: #04070c; }
+/* 洞口那道垂直暗帶:一片比窗還寬的軟邊暗帶掃過去,讀成「車頭鑽進洞裡」的那一瞬間 */
+.win-dim-band {
+  position: absolute; top: 0; bottom: 0; left: 0; width: 70%; pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(4, 7, 12, .85) 35%, rgba(4, 7, 12, .95) 65%, transparent);
+}
+/* 洞裡的車內光:極淡的暖色提亮。隧道是唯一「車內比車外亮」成立的地方(audit §3.1) */
+.tunnel-lift { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse 70% 55% at 50% 42%, rgba(255, 186, 110, .55), rgba(255, 150, 70, .12) 70%, transparent); }
+/* 洞壁的燈帶掃過內壁:元素寬 200%,gradient 週期 50% → 兩道帶子相隔剛好一個畫面寬,
+   位移 50% 就是「整段隧道掃過一輪」。刻意只有一輪:這段捲動距離只有 ~126px,
+   兩輪以上在快速捲動下會逼近 WCAG 2.3.1 的 3Hz 紅線。 */
+.tunnel-sweep { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.tunnel-sweep-band {
+  position: absolute; top: 0; bottom: 0; left: 0; width: 200%;
+  background: repeating-linear-gradient(100deg, transparent 0 20%, rgba(255, 193, 122, .11) 25%, transparent 30% 50%);
+}
+/* 出洞回光:光從窗外潑回來 */
+.tunnel-flash { position: absolute; inset: 0; pointer-events: none; background: rgba(226, 238, 255, 1); }
+
 /* 綠色線稿車廂(Boot) */
 .wirecar { width: 100%; height: 100%; filter: drop-shadow(0 0 2.5px rgba(6, 255, 49, .55)); }
 .wirecar .draw { fill: none; stroke: var(--green); stroke-width: 2.4; stroke-linejoin: round; stroke-linecap: round; }
@@ -175,7 +197,9 @@ a { color: var(--green); }
 @media (prefers-reduced-motion: reduce) { .start { animation: none; } }
 
 /* 到站轉場 → 出站大廳 */
-.concourse-intro { position: absolute; inset: 0; z-index: 5; display: grid; justify-items: center; align-content: start; padding-top: 8vh; background: var(--bg); }
+/* z-index 要壓過 door canvas(7):出站的門關上之後,大廳是疊在門上浮現的 ——
+   「門關 = 簾幕落下」。gate 相位的 start 按鈕(8)與這層不會同時存在,不衝突。 */
+.concourse-intro { position: absolute; inset: 0; z-index: 9; display: grid; justify-items: center; align-content: start; padding-top: 8vh; background: var(--bg); }
 .concourse-intro-inner { max-width: 760px; width: 100%; padding: 0 24px; }
 .concourse { background: var(--bg); color: var(--text); min-height: 100vh; min-height: 100dvh; padding: 8vh 24px 44px; }
 .concourse-inner { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 40px; }
