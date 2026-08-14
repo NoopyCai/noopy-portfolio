@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { drawScene } from "@/lib/scene";
+import { useFrame, setShown, type FrameBus } from "@/lib/frame";
 import type { SceneType } from "@/content/stations";
 
 type Rect = { left: number; top: number; w: number; h: number; r: string; pos: string };
@@ -54,30 +55,26 @@ function buildStrip(scene: SceneType, bg: boolean) {
   return strip;
 }
 
-// 單一車窗:換站 crossfade + 窗景隨捲動水平流動。
+// 單一車窗:換站 crossfade(離散,走 React)+ 窗景隨捲動水平流動(連續,走 frame bus)。
 export function Window({
+  bus,
   scene,
   rect,
   bg,
-  pan,
-  platform = 0,
-  dim = 0,
-  band = null,
+  center = false,
 }: {
+  bus: FrameBus;
   scene: SceneType;
   rect: Rect;
   bg: boolean;
-  pan: number;
-  /** B2:月台層不透明度(只有中央窗會拿到非 0) */
-  platform?: number;
-  /** A5:隧道壓暗 */
-  dim?: number;
-  /** A5:進洞時掃過的垂直暗帶位移(%),null = 不掛 */
-  band?: number | null;
+  /** 中央窗:只有它吃 A5 進洞的那道垂直暗帶 */
+  center?: boolean;
 }) {
   const [layers, setLayers] = useState<{ id: number; scene: SceneType; on: boolean }[]>(() => [
     { id: uid++, scene, on: true },
   ]);
+  const dimRef = useRef<HTMLDivElement>(null);
+  const bandRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setLayers((prev) => {
@@ -100,6 +97,19 @@ export function Window({
     };
   }, [layers]);
 
+  // A5:壓暗與暗帶。兩層都是**常駐掛載 + display 切換** —— 舊寫法是條件式掛載,
+  // 但掛不掛載是離散事件(會逼出 re-render);display:none 的元素同樣不進 paint、
+  // 不產生合成層,「巡航段零合成層」的成立條件沒有改變。
+  useFrame(bus, () => {
+    const tunnel = bus.frame.tunnel;
+    const dim = tunnel ? tunnel.dim : 0;
+    setShown(dimRef.current, dim > 0);
+    if (dim > 0 && dimRef.current) dimRef.current.style.opacity = String(dim);
+    const band = center && tunnel ? tunnel.band : null;
+    setShown(bandRef.current, band !== null);
+    if (band !== null && bandRef.current) bandRef.current.style.transform = `translate3d(${band.toFixed(1)}%, 0, 0)`;
+  });
+
   return (
     <div
       style={{
@@ -113,16 +123,16 @@ export function Window({
       }}
     >
       {layers.map((l) => (
-        <SceneLayer key={l.id} scene={l.scene} bg={bg} pos={rect.pos} on={l.on} pan={pan} />
+        <SceneLayer key={l.id} bus={bus} scene={l.scene} bg={bg} pos={rect.pos} on={l.on} />
       ))}
       {/* B2:月台層。pan 與主窗景同源,B1 的減速曲線因此免費繼承 —— 月台滑進來、隨停站定格。
           三扇窗都疊:只給中央窗的話,進站時會變成「中央窗是夜間月台、左右窗還是白天藍天」
           —— 同一節車廂裡兩個世界(使用者實測回報)。bg 沿用各窗原本的設定(左右窗吃無地標
           的 bg 變體),objectPosition 也沿用各自的 pos,所以三扇是同一座月台的不同切片。 */}
-      <PlatformLayer pos={rect.pos} pan={pan} opacity={platform} bg={bg} />
+      <PlatformLayer bus={bus} pos={rect.pos} bg={bg} />
       {/* A5:隧道壓暗。擺在玻璃**之下** —— 窗外一黑,玻璃反而更該反光(那是物理,不是裝飾)。 */}
-      {dim > 0 && <div className="win-dim" style={{ opacity: dim }} />}
-      {band !== null && <div className="win-dim-band" style={{ transform: `translate3d(${band.toFixed(1)}%, 0, 0)` }} />}
+      <div ref={dimRef} className="win-dim" style={{ display: "none" }} />
+      <div ref={bandRef} className="win-dim-band" style={{ display: "none" }} />
       {/* A6:窗上那層玻璃。少了它,窗景看起來像挖了個洞直接看出去,而不是隔著車窗看。
           極淡是刻意的 —— 疊在窗景之上的任何亮度都會吃掉夜景的層次(見 audit §1.2)。 */}
       <div className="win-glass" />
@@ -133,20 +143,17 @@ export function Window({
 // B2:窗外真的有站。進站時月台從無到有滑入、停站時定格、離站退出 ——
 // opacity 由 eased dist 驅動(見 ScrollJourney),所以它就是 B1 減速曲線的視覺證據。
 // blit 只在 opacity > 0(dist < 0.12)時執行:巡航段這一層完全不畫,零成本。
-function PlatformLayer({ pos, pan, opacity, bg }: { pos: string; pan: number; opacity: number; bg: boolean }) {
+function PlatformLayer({ bus, pos, bg }: { bus: FrameBus; pos: string; bg: boolean }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const buf = useRef<HTMLCanvasElement | null>(null);
-  const on = opacity > 0;
-  useEffect(() => {
-    if (!on || buf.current) return; // 第一次真的要用到才建(第 0 站永遠不會走到這裡)
-    buf.current = buildStrip("platform", bg);
-    blit(ref.current, buf.current, pan);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [on]);
-  useEffect(() => {
-    if (!on) return; // 巡航段:不 blit
-    blit(ref.current, buf.current, pan);
-  }, [pan, on]);
+  useFrame(bus, () => {
+    const op = bus.frame.platform;
+    const c = ref.current;
+    if (c) c.style.opacity = String(op);
+    if (op <= 0) return; // 巡航段:不 blit
+    if (!buf.current) buf.current = buildStrip("platform", bg); // 第一次真的要用到才建(第 0 站永遠不會走到這裡)
+    blit(c, buf.current, bus.frame.x);
+  });
   return (
     <canvas
       ref={ref}
@@ -158,7 +165,7 @@ function PlatformLayer({ pos, pan, opacity, bg }: { pos: string; pan: number; op
         objectFit: "cover",
         objectPosition: pos,
         imageRendering: "pixelated",
-        opacity,
+        opacity: 0,
         display: "block",
       }}
       aria-hidden
@@ -166,18 +173,20 @@ function PlatformLayer({ pos, pan, opacity, bg }: { pos: string; pan: number; op
   );
 }
 
-function SceneLayer({ scene, bg, pos, on, pan }: { scene: SceneType; bg: boolean; pos: string; on: boolean; pan: number }) {
+function SceneLayer({ bus, scene, bg, pos, on }: { bus: FrameBus; scene: SceneType; bg: boolean; pos: string; on: boolean }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const buf = useRef<HTMLCanvasElement | null>(null);
   useEffect(() => {
     const strip = buildStrip(scene, bg);
     buf.current = strip;
-    blit(ref.current, strip, pan);
+    blit(ref.current, strip, bus.frame.x);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scene, bg]);
-  useEffect(() => {
-    blit(ref.current, buf.current, pan);
-  }, [pan]);
+  // 每幀重畫的只有這一句 drawImage ×2;訂閱時的立即套用讓新掛上來的那層(換站 crossfade
+  // 的上層)不必等下一次捲動就有正確的切片。
+  useFrame(bus, () => {
+    if (buf.current) blit(ref.current, buf.current, bus.frame.x);
+  });
   return (
     <canvas
       ref={ref}
