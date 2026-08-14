@@ -46,9 +46,15 @@ components/
   Icon.tsx              lucide 薄包裝,語意固定
   SoundToggle.tsx       音軌狀態機(module scope)+ 左上角靜音鍵
 lib/
-  progress.ts           相位數學 + 車窗/LED 座標(cabin.jpg 實測百分比)
+  progress.ts           相位數學 + 車窗/LED 座標(cabin.jpg 實測百分比;換基底必須重量,量法見
+                        docs/ai-illustration-prompts.md §E。LED_RECT 是唯一來源:DOM 跑馬燈的
+                        定位框與門場景背板「把烤死字塗黑」的矩形共用它)
   scene.ts              ★ 六種窗景的逐像素 canvas 繪製(純函式,無動畫)
 content/stations.ts     六站全部內容(雙語)。改文案只動這裡
+public/
+  cabin.jpg             ★ 全站的車廂基底(1672×941,150 KB)。2026-08 換成**無立柱**的新版
+  cabin/cabin-front.png   立柱+橫杆去背層(2715×1528 RGBA,119 KB)。**目前還沒接進 DOM**,
+                          是 3D 化階段 1 的視差前置素材(spec:docs/specs/3d-stages-2026-08.md)
 ```
 
 ### 相位
@@ -71,7 +77,7 @@ content/stations.ts     六站全部內容(雙語)。改文案只動這裡
 | 0.30 → 0.85 | 相機 dolly-in 穿過門框（`z 4.2 → -1.2`），門柱與門板從兩側掠過＝視差；俯角 -4.5° 在中途回正 | `camera.position.z` / `camera.rotation.x`，`near = 0.05`（不然穿門那幾幀門框會被近平面切掉） |
 | 0.85 → 1.0 | 相機定住，canvas CSS opacity 1→0 溶接給 DOM 車廂 | `Door3D` 的 `fade`；相機必須是靜止的，會動的畫面溶接會抖 |
 
-**末幀對位**是這個場景唯一不能妥協的數字：背板每幀重算成「剛好 cover 視錐」的大小（`2·dist·tan(fov/2)`，寬螢幕改由 `aspect / 1.77683` 決定），再乘上 sway 那層常駐的 `1.035`。末幀（`doorP = 1`，相機 `z = -1.2`、俯角 0、`zoom = 1`）算出來就等於 DOM 車廂的 `max(100vw, 177.68vh)` cover 幾何 × 1.035。實測（1470×801 與 1470×745 兩種視窗、與 DOM 的 cabin.jpg 逐列互相關）**位移 dx = 0、dy ≈ -0.5px**。動到 `FOV` / `CAM_Z1` / `CABIN_Z` / `zoom` 任何一個都會破壞這件事。
+**末幀對位**是這個場景唯一不能妥協的數字：背板每幀重算成「剛好 cover 視錐」的大小（`2·dist·tan(fov/2)`，寬螢幕改由 `aspect / 1.77683` 決定），再乘上 sway 那層常駐的 `1.035`。末幀（`doorP = 1`，相機 `z = -1.2`、俯角 0、`zoom = 1`）算出來就等於 DOM 車廂的 `max(100vw, 177.68vh)` cover 幾何 × 1.035。實測（與 DOM 的 cabin.jpg 逐列/逐行互相關，取拋物線插值的次像素峰值）**位移 dx / dy 都在 0.1px 以內**：2026-08 ② 二次換基底後重測，1920×958 是 dx +0.045 / dy +0.024、直式 390×844 是 dx +0.016 / dy +0.037，相關係數 0.9989–0.9996；同一輪在 Chrome 實機另量一組(視窗 1470×801 與直式 390×801，dpr 2)是 dx +0.019 / dy +0.084 與 dx +0.011 / dy +0.053，相關 0.9988–0.9997（① 那輪是 +0.02/+0.03 與 +0.001/+0.002，同一量級。量法見 prompts §E）。動到 `FOV` / `CAM_Z1` / `CABIN_Z` / `zoom` 任何一個都會破壞這件事。
 
 交棒是 **crossfade 不是硬切**：canvas 畫的是 cabin.jpg 原圖（車窗全黑、LED 是照片裡烤死的字），底下的 DOM 車廂有即時窗景與跑馬燈，最後 15% 讓它從底下漸亮，語意是「上車後設備通電」。門的區間外 canvas 只掛 `.door-canvas-idle`（`display:none`），**元件本身永不卸載**——原因見坑 10。
 
@@ -90,7 +96,7 @@ content/stations.ts     六站全部內容(雙語)。改文案只動這裡
 
 3. **文字不要放進 sway 層。** 那層常駐 `scale(1.035)`（滑鼠視差 ±15px 的過掃描），加上 `will-change` + `preserve-3d`，瀏覽器會整層先光柵化再 GPU 縮放 → 文字與像素字型被重新取樣而**發糊**。照片和 canvas 放大 3.5% 看不出來，文字看得出來。資訊卡與路線圖必須是 `.camera` 的直接子元素。
 
-4. **`CabinComposite` 的寬度是 `max(100vw, 177.68vh)`，不要加上限。** 177.68 = 1672/941（cabin.jpg 比例）。加了 `min(..., Nvw)` 之類的上限，直式手機就會出現上下留邊。直式滿屏的代價是中央窗的圓角框會被裁到畫面外——這是比例算出來的，不是可以兩全的選擇。
+4. **`CabinComposite` 的寬度是 `max(100vw, 177.68vh)`，不要加上限。** 177.68 = 1672/941，也就是 cabin.jpg 的比例——**這個數字是全站的紅線，換基底時是圖去遷就它**（2026-08 ① 的基底原生 2730×1536 = 1.77734，重採樣成 2715×1528 = 1.7768324 才上線；② 的重生成版直接就是 1672×941，比例分毫不差、零重採樣。讓比例漂掉就得同步改 `door3d/scene.ts` 的 `CABIN_ASPECT`，而末幀對位會跟著崩）。加了 `min(..., Nvw)` 之類的上限，直式手機就會出現上下留邊。直式滿屏的代價是中央窗的圓角框會被裁到畫面外——這是比例算出來的，不是可以兩全的選擇。
 
 5. **`StationPanel` 的 `transform` 已被淡入的 inline style 佔用。** 要垂直居中請用 `top/bottom: 0` + `height: fit-content` + `margin: auto 0`，不要用 `translateY(-50%)`（inline style 會蓋掉 CSS）。
 
@@ -100,7 +106,7 @@ content/stations.ts     六站全部內容(雙語)。改文案只動這裡
 
 8. **`drawScene` 有 module-scope 的 Map 快取**（`Window.tsx`）。它是逐像素迴圈（單張約 108k 次 `fillRect`），六站 × `{bg, full}` 最多 12 張。不要繞過快取直接呼叫。
 
-9. **字型與 `cabin.jpg` 都在 `layout.tsx` 裡 preload。** cabin.jpg 只有進 ride 相位才進 DOM，沒有 preload 的話第一次搭車必然看到 pop-in。
+9. **字型與 `cabin.jpg` 都在 `layout.tsx` 裡 preload。** cabin.jpg 只有進 ride 相位才進 DOM，沒有 preload 的話第一次搭車必然看到 pop-in。它同時是 LCP 候選，所以壓縮預算是 **≤ 500 KB**（現在 150 KB；4:4:4 不要動——圖裡的告示與海報都是小字，色度取樣一減就糊）。**下次換基底請盡量拿到原生 2× 尺寸**：現行 1672×941 在 1920 寬的桌機已經要放大 1.19×（retina 再 ×2），②之前的 2715×1528 版本沒有這個問題。
 
 10. **`Door3D` 不可以條件式掛載，cleanup 也不可以 `loseContext()` / `renderer.dispose()`。** 一個 `<canvas>` 一輩子只有一個 WebGL context（`getContext` 對同一元素永遠回傳同一物件），被 `loseContext()` 殺掉就再也活不過來。舊寫法是「離開門相位就卸載」+ cleanup 呼叫 `loseContext()`，於是上下捲一趟就建/毀一次 context；dev 的 StrictMode 更會 mount→cleanup→mount，第二次拿到的正是剛被殺掉的 context，之後所有 `gl.*` 都是 no-op（實測 `isContextLost() === true`）→ **整頁白屏**，而且 refresh 才會好。現在：永遠掛載、用 `display:none` 收起來、只在真的離開頁面時交給瀏覽器回收，另外掛 `webglcontextlost`/`restored` 做二次保險。
 
