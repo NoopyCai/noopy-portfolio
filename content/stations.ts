@@ -33,6 +33,9 @@ export type PanelData = {
   impact?: Bi; // 到站廣播主句:一句話關鍵成果
   links?: Link[]; // 專案連結(repo / demo / case)
   detail?: { problem: Bi; approach: Bi; result: Bi }; // 「看細節」展開層
+  // 專案畫面截圖,只出現在「看細節」modal 的最上面(圖先給第一印象)。alt 要描述
+  // 畫面內容而不是「專案截圖」——螢幕閱讀器使用者要的是資訊,不是檔名。
+  screenshot?: { src: string; alt: Bi };
 };
 export type Station = {
   id: StationId;
@@ -40,8 +43,29 @@ export type Station = {
   name: Bi;
   led: Bi;
   grade: Grade;
+  // 時刻表看板的「月台」欄。純主題性的月台代號(這是一列虛構的夜車),
+  // 刻意不等於站序,不然那一欄只是把第一欄再寫一次。
+  platform: string;
   panel: PanelData;
 };
+
+// 出站大廳「關於我」的三段。刻意**不再**抄站 1 與站 6 的 body —— 讀者剛看完六站,
+// 逐字重讀一遍是 audit §6.2 的問題。三段各有職責:怎麼工作的 / 想找什麼 / 這個網站本身。
+// 第三段的 "GitHub" 由 Concourse 就地變成連結(見該檔的 linkify)。
+export const ABOUT: Bi[] = [
+  {
+    zh: "我是蔡守傑,在電商團隊同時照顧前端與資料兩端:白天調 Vue 元件的互動,晚上排 BigQuery 的推薦管線。能一個人把功能從 UI 一路做到伺服器端上線,是我最常被需要的原因。",
+    en: "I'm NoopyCai. On an e-commerce team I work both ends: tuning Vue interactions by day, scheduling BigQuery recommendation pipelines by night. Owning a feature from UI to server-side launch is what teams rely on me for.",
+  },
+  {
+    zh: "正在尋找前端或全端的角色,偏好產品導向、願意對成效負責的團隊。Base 台北/新北,對遠端友善的環境有加分。",
+    en: "Looking for a frontend or full-stack role on a product-minded team that owns outcomes. Based around Taipei; remote-friendly is a plus.",
+  },
+  {
+    zh: "這個網站也是作品:六站窗景由 canvas 逐像素即時繪製,車門過場是 three.js 場景,整趟旅程掛在同一個捲動標量上、倒著捲就倒著開。做法都在 GitHub。",
+    en: "This site is itself a project: the window scenery is pixel-painted on canvas in real time, the doors are a three.js scene, and the whole ride hangs off a single scroll scalar · scroll back and the train runs backward. It's all on GitHub.",
+  },
+];
 
 export const STATIONS: Station[] = [
   {
@@ -51,6 +75,7 @@ export const STATIONS: Station[] = [
     led: { zh: "本次列車即將出發 · 車門關閉", en: "This service is departing · doors closing" },
     // 傍晚月台:冷藍,但月台燈池本身是暖的(場景裡畫的)。整條曲線的起點。
     grade: { brightness: 0.95, saturate: 1, tint: "rgba(120,150,190,0.16)" },
+    platform: "1A",
     panel: {
       kind: "hero",
       title: { zh: "蔡守傑 NoopyCai", en: "NoopyCai" },
@@ -71,6 +96,7 @@ export const STATIONS: Station[] = [
     led: { zh: "下一站 電商推薦系統", en: "Next stop · Recommendation System" },
     // 黃昏市郊:全程唯一的暖亮峰,天黑之前最後一段有色溫的光。
     grade: { brightness: 1.05, saturate: 1.12, tint: "rgba(255,140,50,0.30)" },
+    platform: "2A",
     panel: {
       kind: "project",
       title: { zh: "電商推薦系統", en: "Recommendation Engine" },
@@ -85,6 +111,13 @@ export const STATIONS: Station[] = [
       impact: { zh: "3 種推薦策略 × 即時個人化,訂單分析到上線一條龍", en: "3 strategies × real-time personalization, analytics-to-serving end to end" },
       // TODO: 有可公開的成效數字(如點擊率/轉換提升)時,補進 impact 更有力
       // links: [{ label: "Demo", href: "…" }],  // TODO: 有可公開連結再補
+      screenshot: {
+        src: "/imgs/recommendation.jpg",
+        alt: {
+          zh: "電商商品頁的「你可能會喜歡」推薦區塊:一整列六張沙發商品卡,每張有商品名稱、折後價與被劃掉的原價。",
+          en: "An e-commerce page's 'You may also like' row: six sofa recommendation cards, each with a product name, a discounted price, and the struck-through original price.",
+        },
+      },
       detail: {
         problem: { zh: "電商想提升轉換,卻缺乏個人化推薦與自動化資料流。", en: "E-commerce needed higher conversion but lacked personalized recommendations and an automated data pipeline." },
         approach: { zh: "用 BigQuery ML 建 Top Sale 熱銷與 I2I 隱式矩陣分解相似商品,搭 Cloud Pub/Sub → BigQuery → Redis 自動化管線,對外提供即時推薦 API。", en: "Built top-sellers and I2I implicit matrix factorization on BigQuery ML, with a Cloud Pub/Sub → BigQuery → Redis pipeline and a real-time recommendation API." },
@@ -99,6 +132,7 @@ export const STATIONS: Station[] = [
     led: { zh: "下一站 LINE LIFF 會員綁定", en: "Next stop · LINE LIFF Binding" },
     // 深夜跨河:曲線的谷底。舊版靠 multiply 壓暗,改 soft-light 後改由 brightness 壓。
     grade: { brightness: 0.72, saturate: 0.85, tint: "rgba(30,60,120,0.34)" },
+    platform: "2B",
     panel: {
       kind: "project",
       title: { zh: "LINE LIFF × Magento2 會員綁定", en: "LINE LIFF × Magento2 Binding" },
@@ -112,6 +146,13 @@ export const STATIONS: Station[] = [
       role: { zh: "獨立開發", en: "Solo build" },
       impact: { zh: "社群帳號 × 電商會員無縫綁定,一鍵時效自動登入", en: "Seamless LINE↔member binding with one-tap timed auto-login" },
       // links: [{ label: "Demo", href: "…" }],  // TODO: 有可公開連結再補
+      screenshot: {
+        src: "/imgs/line_liff.jpg",
+        alt: {
+          zh: "LINE LIFF 綁定完成畫面:綠色勾選圖示下方寫著「已綁定 · 您已是綁定會員」,再下面提示可以關閉此頁面,左右兩側是品牌吉祥物插畫。",
+          en: "The LINE LIFF binding success screen: a green check mark above '已綁定' (linked) and a note that the page can now be closed, flanked by brand mascot illustrations.",
+        },
+      },
       detail: {
         problem: { zh: "LINE 社群流量與 Magento2 電商會員各自獨立,難以整合行銷與登入。", en: "LINE social traffic and Magento2 members were siloed, blocking unified marketing and login." },
         approach: { zh: "以 Vue3+Vite LIFF SPA 串接 LINE 與 Magento2,GCF Serverless API、AES-256 時效登入 Token、Email OTP,並設計業務員 QR 邀請導流。", en: "Bridged LINE and Magento2 with a Vue3+Vite LIFF SPA, GCF serverless API, AES-256 timed tokens, Email OTP, and a sales-rep QR invite funnel." },
@@ -127,6 +168,7 @@ export const STATIONS: Station[] = [
     // 深夜台北:城市光害讓它比跨河那段微亮一點,但仍然是夜。舊版 brightness(1.5) + screen
     // 是全站最嚴重的對比崩壞來源,也是夜車敘事被打斷的地方(audit §1.2 / §3.1)。
     grade: { brightness: 0.86, saturate: 1.05, tint: "rgba(60,90,150,0.28)" },
+    platform: "3A",
     panel: {
       kind: "project",
       title: { zh: "AI 工具整合", en: "AI Automation Toolkit" },
@@ -139,6 +181,13 @@ export const STATIONS: Station[] = [
       year: "2025", // TODO: 確認實際年份
       role: { zh: "獨立開發", en: "Solo build" },
       impact: { zh: "把 AI 導入工作流,內容產製省約 8 成手刻時間", en: "Brought AI into the workflow, ~80% less hand-coding" },
+      screenshot: {
+        src: "/imgs/ai_news_hub.jpg",
+        alt: {
+          zh: "AI News Hub 內部工具的登入頁:左半是讀報吉祥物插畫,右半是「使用 Google 帳號登入」按鈕,下方註明僅限公司網域帳號。",
+          en: "The AI News Hub internal tool sign-in page: a newspaper-reading mascot illustration on the left, a 'Sign in with Google' button on the right, restricted to company-domain accounts.",
+        },
+      },
       detail: {
         problem: { zh: "週報、Blog 內容與商品資料整理耗費大量重複人工。", en: "Weekly reports, blog content, and product data all cost heavy repetitive manual work." },
         approach: { zh: "用 Gemini / Claude Code 建三套工具:AI 週報(RSS→摘要→PDF→Google Chat)、Blog 內容工具(Doc→HTML + 圖片 ALT 生成)、商品資料 JSONL 匯出供檢索。", en: "Built three tools with Gemini / Claude Code: an AI weekly report (RSS→summary→PDF→Google Chat), a blog content tool (Doc→HTML + ALT generation), and JSONL product export for retrieval." },
@@ -153,6 +202,7 @@ export const STATIONS: Station[] = [
     led: { zh: "技能車廂 · Frontend / Backend / Data / AI", en: "Skills car · Frontend / Backend / Data / AI" },
     // 凌晨田野(blue hour):黎明前最暗的一段,只有零星農舍燈火。技能站放在這裡有隱喻。
     grade: { brightness: 0.8, saturate: 0.9, tint: "rgba(48,76,120,0.30)" },
+    platform: "3B",
     panel: {
       kind: "skills",
       title: { zh: "技術棧", en: "Tech Stack" },
@@ -172,12 +222,16 @@ export const STATIONS: Station[] = [
     led: { zh: "終點站 到了 · 感謝搭乘", en: "Terminal · thanks for riding" },
     // 破曉海景:唯一的亮結尾。捲到底 = 搭了一夜車、天亮了。
     grade: { brightness: 1.03, saturate: 1.05, tint: "rgba(255,150,170,0.22)" },
+    platform: "4A",
     panel: {
       kind: "contact",
       title: { zh: "抵達終點・保持聯絡", en: "End of the line · let's talk" },
+      // 這張卡只留情緒收尾。聯絡方式與履歷改由出站大廳統一負責(唯一行動點),
+      // 車廂裡再放一份等於同一件事講兩次,而且是壓在窗景上最難讀的那一份(audit §6.4)。
+      // contacts / link 欄位刻意保留:StaticFallback 與 Concourse 都靠它們渲染。
       body: {
-        zh: "對遠端工作有意願,希望地點台北/新北。歡迎聊聊前端/全端機會。",
-        en: "Open to remote; based around Taipei. Happy to chat about frontend / full-stack roles.",
+        zh: "天亮了,這趟車到這裡。謝謝你陪我坐完六站 · 聯絡方式在出站後的大廳,往下捲就到。",
+        en: "Daylight, end of the line. Thanks for riding all six stops · you'll find how to reach me in the concourse just below.",
       },
       contacts: [
         { label: "popparty3310@gmail.com", href: "mailto:popparty3310@gmail.com" },

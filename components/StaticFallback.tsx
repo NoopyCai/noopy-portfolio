@@ -9,7 +9,9 @@ export function StaticFallback() {
   return (
     <main style={{ maxWidth: 820, margin: "0 auto", padding: "48px 20px", display: "grid", gap: 56 }}>
       <header>
-        <h1 style={{ fontSize: "clamp(28px,6vw,52px)", margin: 0 }}>蔡守傑 NoopyCai</h1>
+        {/* h2 而不是 h1:Concourse 一律渲染,那裡的站名牌是全站唯一的 h1。
+            這個降級版與它同時存在於 DOM,兩個 h1 會讓爬蟲與螢幕閱讀器都失去主標。 */}
+        <h2 style={{ fontSize: "clamp(28px,6vw,52px)", margin: 0 }}>蔡守傑 NoopyCai</h2>
         <p style={{ color: "var(--muted)", fontFamily: "var(--font-led)" }}>夜車・區間 · Night Local · Frontend / Full-stack</p>
       </header>
       {STATIONS.map((s) => {
@@ -17,7 +19,8 @@ export function StaticFallback() {
         return (
           <section key={s.id} aria-label={t(s.name)}>
             <div style={{ fontFamily: "var(--font-led)", color: "var(--amber)", letterSpacing: ".2em", fontSize: 12 }}>{t(s.name)}</div>
-            <h2 style={{ margin: "6px 0 10px", fontSize: "clamp(22px,4vw,32px)" }}>{t(p.title)}</h2>
+            {/* 上面的標題降成 h2 之後,每站往下一級才不會變成它的兄弟 */}
+            <h3 style={{ margin: "6px 0 10px", fontSize: "clamp(22px,4vw,32px)" }}>{t(p.title)}</h3>
             {p.subtitle && <div style={{ color: "var(--muted)", fontFamily: "var(--font-led)", marginBottom: 10 }}>{t(p.subtitle)}</div>}
             {p.body && <p style={{ lineHeight: 1.8 }}>{t(p.body)}</p>}
             {p.tags && (

@@ -4,6 +4,9 @@ import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { STATIONS } from "@/content/stations";
 import { phaseOf, doorProgress, rideProgress, exitProgress, exitDoorProgress, tunnelProgress, lerpGrade, clamp, smooth, stationEase, PHASE, TUNNEL, EXIT_DOOR } from "@/lib/progress";
+// pin 長度與平滑捲動搬到 lib/scroll.ts —— 時刻表(Concourse)要用同一組數字跳站,
+// 而 ScrollJourney 已經 import 了 ConcourseHero,反向 import 會 circular。
+import { TOTAL_LEN, smoothScrollTo } from "@/lib/scroll";
 import { CabinComposite, type TunnelFx } from "./CabinComposite";
 import { Door3D } from "./Door3D";
 import { StationPanel } from "./StationPanel";
@@ -14,28 +17,10 @@ import { useLang } from "./LangProvider";
 
 gsap.registerPlugin(ScrollTrigger);
 
-const TOTAL_LEN = 8200; // pin 捲動總距離(px):gate → door(車門過場) → ride(六站) → exit(起身轉身)
-
 // 開頁歸零只做一次(module scope,不是 ref)。dev 的 StrictMode 會把 effect 跑兩次、
 // HMR 會再跑一次 —— 那時使用者可能已經在車廂裡,scrollTo(0,0) 會把人硬拉回月台,
 // 途中 pin 重算 + 相位跳變就是「往上滑白屏」的來源之一。
 let didInitialReset = false;
-
-// 逐幀 window.scrollTo 的平滑捲動:每幀觸發真實 scroll 事件驅動 ScrollTrigger。
-// (不用 gsap ScrollToPlugin —— 它與 pinned scrub ScrollTrigger 會回饋成死迴圈而凍結)
-function smoothScrollTo(target: number, duration = 1300) {
-  const start = window.scrollY;
-  const dist = target - start;
-  if (Math.abs(dist) < 1) return;
-  const t0 = performance.now();
-  const step = (now: number) => {
-    const t = Math.min(1, (now - t0) / duration);
-    const e = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; // easeInOutQuad
-    window.scrollTo(0, Math.round(start + dist * e));
-    if (t < 1) requestAnimationFrame(step);
-  };
-  requestAnimationFrame(step);
-}
 
 export function ScrollJourney() {
   const wrap = useRef<HTMLDivElement>(null);

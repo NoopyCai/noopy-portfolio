@@ -59,13 +59,9 @@ export function StationPanel({ station, visible }: { station: Station; visible: 
             ))}
           </div>
         )}
-        {p.contacts && (
-          <div className="sp-contacts">
-            {p.contacts.map((c) => (
-              <a key={c.label} href={c.href} rel="noopener" target="_blank">{c.label}</a>
-            ))}
-          </div>
-        )}
+        {/* 終點站的 contacts / 履歷連結刻意不在車廂裡渲染:行動點統一收在出站大廳
+            (唯一 CTA),這裡只留情緒收尾。資料本身留在 STATIONS,由 Concourse 與
+            StaticFallback 使用。 */}
         <div className="sp-actions">
           {p.detail && (
             <button type="button" className="detail-btn" onClick={() => setOpen(true)}>
@@ -75,11 +71,6 @@ export function StationPanel({ station, visible }: { station: Station; visible: 
           {p.links?.map((l) => (
             <a key={l.href} href={l.href} target="_blank" rel="noopener" className="sp-link">{l.label} <Icon name="external" /></a>
           ))}
-          {p.link && (
-            <a href={p.link} target="_blank" rel="noopener" className="sp-link sp-link-cta">
-              {t({ zh: "下載履歷 PDF", en: "Résumé PDF" })} <Icon name="play" />
-            </a>
-          )}
         </div>
       </div>
 
@@ -91,6 +82,17 @@ export function StationPanel({ station, visible }: { station: Station; visible: 
               {t(station.name)}{p.year ? ` · ${p.year}` : ""}{p.role ? ` · ${t(p.role)}` : ""}
             </div>
             <h3 style={{ margin: "6px 0 14px", fontSize: "clamp(18px,2.4vw,26px)" }}>{t(p.title)}</h3>
+            {/* 截圖放在「問題/做法/成果」之前:三個專案站唯一的可驗證佐證,先給第一印象。
+                lazy 是為了不讓三張圖進首屏的網路佇列(modal 沒開之前根本不該下載)。 */}
+            {p.screenshot && (
+              <img
+                className="detail-shot"
+                src={p.screenshot.src}
+                alt={t(p.screenshot.alt)}
+                loading="lazy"
+                decoding="async"
+              />
+            )}
             {([
               [{ zh: "問題", en: "Problem" }, p.detail.problem],
               [{ zh: "做法", en: "Approach" }, p.detail.approach],

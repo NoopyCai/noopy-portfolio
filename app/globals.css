@@ -176,6 +176,8 @@ a { color: var(--green); }
 .detail-card { position: relative; width: min(560px, 92vw); max-height: 82vh; overflow-y: auto; background: rgba(16, 24, 20, .97); border: 1px solid rgba(110, 180, 63, .35); border-radius: 16px; padding: 26px 26px 24px; box-shadow: 0 24px 60px rgba(0, 0, 0, .6); color: var(--text); animation: rise .28s ease; }
 .detail-close { position: absolute; top: 12px; right: 14px; background: none; border: none; color: var(--muted); font-size: 18px; cursor: pointer; line-height: 1; }
 .detail-close:hover { color: var(--green); }
+/* 專案截圖:modal 最上面的第一印象。圓角吃卡片級(16px),邊框用髮絲線收邊 */
+.detail-shot { display: block; width: 100%; height: auto; margin: 0 0 18px; border: 1px solid var(--line); border-radius: 16px; background: rgba(255, 255, 255, .03); }
 .detail-row { margin: 12px 0; }
 .detail-row .detail-label { font-family: var(--font-led); font-size: 11px; letter-spacing: .16em; color: var(--emu-green); margin-bottom: 4px; }
 .detail-row p { margin: 0; line-height: 1.75; font-size: 14.5px; }
@@ -200,14 +202,42 @@ a { color: var(--green); }
 /* z-index 要壓過 door canvas(7):出站的門關上之後,大廳是疊在門上浮現的 ——
    「門關 = 簾幕落下」。gate 相位的 start 按鈕(8)與這層不會同時存在,不衝突。 */
 .concourse-intro { position: absolute; inset: 0; z-index: 9; display: grid; justify-items: center; align-content: start; padding-top: 8vh; background: var(--bg); }
-.concourse-intro-inner { max-width: 760px; width: 100%; padding: 0 24px; }
+/* 兩個 hero 容器同寬,pin 解除那一幀站名牌才不會橫向位移(時刻表需要 920px 的橫向空間) */
+.concourse-intro-inner { max-width: 920px; width: 100%; padding: 0 24px; }
 .concourse { background: var(--bg); color: var(--text); min-height: 100vh; min-height: 100dvh; padding: 8vh 24px 44px; }
-.concourse-inner { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 40px; }
+.concourse-inner { max-width: 920px; margin: 0 auto; display: flex; flex-direction: column; gap: 40px; }
 .concourse-hero { text-align: center; }
-.concourse-hero .eyebrow { font-family: var(--font-led); font-size: clamp(18px, 3vw, 26px); font-weight: 400; letter-spacing: .3em; color: var(--green); margin: 0 0 10px; }
+/* 站名牌:CONCOURSE 降為方位小標(11px 的指示牌層級),名字才是牌面。
+   選擇器一律帶 .concourse-hero —— 名字那行在轉場疊層裡是 <p>,不然會被下面
+   那條 `.concourse-hero p` 的顏色蓋掉。 */
+.concourse-hero .eyebrow-sign { font-family: var(--font-led); font-size: 11px; letter-spacing: .34em; color: var(--emu-green); margin: 0 0 12px; }
+.concourse-hero .h1-sign { font-family: var(--font-led); font-weight: 400; font-size: clamp(40px, 7vw, 76px); letter-spacing: .14em; line-height: 1.05; color: var(--text); margin: 0; text-shadow: 0 0 26px rgba(233, 239, 248, .16); }
 .concourse-hero p { color: var(--muted); font-family: var(--font-led); letter-spacing: .06em; margin: 0; }
-.concourse-block h3 { font-family: var(--font-led); font-size: 13px; letter-spacing: .18em; color: var(--amber); margin: 0 0 12px; }
-.concourse-block p { line-height: 1.85; margin: 0 0 12px; color: #cfd8e4; }
+.concourse-hero .h1-role { margin-top: 14px; font-size: 14px; }
+/* 區塊標題是 h2(站名牌 h1 的下一級,中間不跳級)。font-weight: 400 是硬規則 ——
+   Departure Mono 單一字重,h2 的預設粗體會被瀏覽器合成,像素網格會糊掉一格 */
+.concourse-block h2 { font-family: var(--font-led); font-weight: 400; font-size: 13px; letter-spacing: .18em; color: var(--amber); margin: 0 0 12px; }
+/* 內文不跟著容器放寬到 920px:那是為了時刻表的五欄,不是為了一行 100 個字 */
+.concourse-block p { line-height: 1.85; margin: 0 0 12px; color: #cfd8e4; max-width: 68ch; }
+
+/* 時刻表看板(audit §6.1)。hairline 紀律:只有表頭下、表尾上各一條線,
+   列與列之間靠 hover 區分 —— 六條橫線會把看板變成試算表。 */
+.concourse-block .tt-title { color: var(--green); text-shadow: 0 0 12px rgba(6, 255, 49, .35); font-size: 14px; }
+.timetable { width: 100%; border-collapse: collapse; font-size: 14px; }
+.timetable thead th { font-family: var(--font-led); font-weight: 400; font-size: 11px; letter-spacing: .18em; color: var(--muted); text-align: left; padding: 0 10px 9px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.timetable tbody { border-bottom: 1px solid var(--line); }
+.tt-row td { padding: 11px 10px; vertical-align: baseline; color: #cfd8e4; transition: background .18s, color .18s; }
+/* 序 / 年份 / 月台是看板上的數字欄 —— 標示系統的字 */
+.tt-row .tt-no, .tt-row .tt-year, .tt-row .tt-plat { font-family: var(--font-led); font-size: 12px; letter-spacing: .08em; color: var(--muted); white-space: nowrap; }
+.tt-row .tt-station { color: var(--text); }
+.tt-row .tt-stop { color: var(--muted); font-size: 13.5px; }
+.timetable .tt-plat { text-align: right; }
+/* 跳站的按鈕長得就是站名本身(整列可點只是滑鼠的便利,鍵盤走這顆) */
+.tt-jump { font: inherit; color: inherit; letter-spacing: inherit; background: none; border: none; padding: 0; text-align: left; cursor: pointer; }
+.tt-row.is-jumpable { cursor: pointer; }
+.tt-row.is-jumpable:hover td { background: rgba(6, 255, 49, .07); color: var(--green); }
+.tt-row.is-jumpable:active td { background: rgba(6, 255, 49, .14); }
+@media (prefers-reduced-motion: reduce) { .tt-row td { transition: none; } }
 .concourse-links { display: flex; flex-wrap: wrap; gap: 12px; }
 .concourse-link { font-family: var(--font-led); font-size: 14px; color: var(--text); text-decoration: none; border: 1px solid rgba(110, 180, 63, .4); border-radius: 999px; padding: 9px 16px; transition: border-color .2s, color .2s, box-shadow .2s; }
 .concourse-link:hover { border-color: var(--green); color: var(--green); box-shadow: 0 0 12px rgba(6, 255, 49, .25); }
@@ -284,6 +314,23 @@ a { color: var(--green); }
   .ctrl { font-size: 11px; padding: 6px 9px; letter-spacing: .04em; }
   .detail-card { padding: 20px 18px 20px; border-radius: 16px; }
   .detail-row p { font-size: 14px; }
+  /* 截圖在窄螢幕吃滿卡寬,但不准吃掉整個 modal 的高度 */
+  .detail-shot { max-height: 40vh; object-fit: contain; margin-bottom: 14px; }
+
+  /* 時刻表摺成卡列:每站兩行(上:序 + 站名 + 年份;下:停靠內容),月台欄隱藏。
+     表頭改成只給螢幕閱讀器 —— 卡列的欄位順序自己會講話,再印一排標題只是雜訊。 */
+  .concourse-hero .h1-sign { letter-spacing: .2em; } /* 76px→40px 之後字距要收,不然會撐破窄螢幕 */
+  .timetable thead { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); }
+  .timetable, .timetable tbody, .timetable tr, .timetable td { display: block; }
+  /* 選擇器要壓過上面那條 `.timetable tr`(同為 0,1,1),不然這裡的 grid 根本不會生效 */
+  .timetable .tt-row { display: grid; grid-template-columns: auto 1fr auto; align-items: baseline; gap: 3px 10px; padding: 10px 2px; min-height: 44px; }
+  .tt-row td { padding: 0; }
+  .tt-row .tt-stop { grid-column: 1 / -1; font-size: 13px; line-height: 1.5; }
+  .tt-row .tt-plat { display: none; }
+  .tt-row .tt-year { text-align: right; }
+  /* 卡列沒有 hover:背景改掛在整列上,:active 才會是一整塊而不是三個色塊 */
+  .tt-row.is-jumpable:hover td, .tt-row.is-jumpable:active td { background: none; }
+  .tt-row.is-jumpable:active { background: rgba(6, 255, 49, .12); border-radius: 8px; }
 }
 
 /* 橫式手機(矮螢幕):面板縮小、避免蓋住車窗過多 */
