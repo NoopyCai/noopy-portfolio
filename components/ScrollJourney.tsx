@@ -23,6 +23,11 @@ gsap.registerPlugin(ScrollTrigger);
 // 途中 pin 重算 + 相位跳變就是「往上滑白屏」的來源之一。
 let didInitialReset = false;
 
+// L1 立柱前景層相對於 sway(1.035)的縮放:1.035 × 1.0241546 = 1.06,也就是前景在螢幕上的
+// 過掃描倍率。**這個數字有三處必須同步**:globals.css 的 .cabin-front(第一幀的預設值)、
+// door3d/scene.ts 合成背板時的 FRONT_REL_SCALE(交棒對位),以及這裡。
+const FRONT_SCALE_REL = 1.0241546;
+
 // 離散狀態:**只有這四個值變化才會 re-render**(audit §4.3 的整個重點)。
 // 連續量(x / grade / doorP / camera transform / 隧道與月台插值)全部走 applyFrame 直寫 DOM。
 type Discrete = {
@@ -39,6 +44,7 @@ export function ScrollJourney() {
   const wrap = useRef<HTMLDivElement>(null);
   const stage = useRef<HTMLDivElement>(null);
   const sway = useRef<HTMLDivElement>(null);
+  const front = useRef<HTMLDivElement>(null); // L1:立柱前景層的容器(img + 它自己的 tint),sway 迴圈直接寫它的 transform
   const camera = useRef<HTMLDivElement>(null); // A6:玻璃視差的 CSS 變數掛在這層,往下傳給每扇窗
   const gateBtn = useRef<HTMLButtonElement>(null);
   const intro = useRef<HTMLDivElement>(null);
@@ -252,6 +258,36 @@ export function ScrollJourney() {
     const onVis = () => { visible = !document.hidden; };
     document.addEventListener("visibilitychange", onVis);
 
+    // ── L1 前景立柱層的視差係數 ────────────────────────────────────────────────
+    // 近的東西動得多。「多多少」不是美感問題,是被過掃描餘裕鎖死的:
+    //   餘裕(px) = (cover 邊長 × (scale − 1)) ÷ 2
+    //   需求(px) = K × 該軸的最大位移;背景層的最大位移是 15 + 2.0 = 17(橫)
+    //              與 12 + 1.5 = 13.5(縱)—— 滑鼠 ±15/±12 加上 A1 底噪的 2.0/1.5。
+    // 用 1440×900(cover 1599×900)算給規格的 K = 1.7:
+    //   · 沿用 sway 的 1.035 → 垂直餘裕只有 900×0.035÷2 = 15.75px,而需求是 1.7×13.5 =
+    //     22.95px,**差 7.2px** —— 立柱層的上下緣會被拉進畫面。這就是前景必須自帶
+    //     過掃描的原因。
+    //   · 自帶 scale 1.06 → 垂直餘裕 27.0px,剩 4.05px;水平餘裕 127.5px vs 28.9px。
+    //   1920×958(cover 1920×1080.6)則是水平 57.6 vs 28.9、垂直 93.7 vs 22.95,寬鬆得多。
+    // 螢幕上的實際倍率因此是 1.035(sway) × 1.0241546(.cabin-front) = 1.06。
+    //
+    // 直式手機把 K 降下來,兩個理由:
+    //   · 幾何:直式的垂直是全站最緊的一軸(視窗高 = 圖高,餘裕全靠 scale)。
+    //     390×844 → 1.06 的餘裕 25.3px;K=1.25 需 16.9px,剩 8.4px(1.7 只會剩 2.4px,
+    //     再加上 sway 那層 ±1.1° 的 rotateX 在 perspective 下多吃的幾 px 就會露)。
+    //   · 觀感:直式 cover 橫向裁掉三分之二(1499px 的圖只看得見 390px),同一段 px
+    //     位移在小螢幕上讀起來幅度大得多 —— 而直式其實只看得到頂端橫杆(兩根立柱在
+    //     x 20% / 79%,早就被裁到畫面外),把它甩得太厲害只會像畫面在抖。
+    const FRONT_K_NARROW = 1.25, FRONT_K_WIDE = 1.7;
+    let frontK = FRONT_K_WIDE;
+    const onResize = () => {
+      const a = window.innerWidth / window.innerHeight;
+      // 0.62(≈ 直式手機)→ 1.30(已經是橫式)之間插值,不寫死斷點:平板轉向不該跳一下
+      frontK = FRONT_K_NARROW + (FRONT_K_WIDE - FRONT_K_NARROW) * clamp((a - 0.62) / (1.3 - 0.62));
+    };
+    onResize();
+    window.addEventListener("resize", onResize);
+
     const target = { x: 0, y: 0 };
     const cur = { x: 0, y: 0 };
     let gate = 0; // 底噪的開關也要平滑:硬切 0↔1 會在進出 ride 的那一幀憑空跳掉 2px
@@ -276,11 +312,21 @@ export function ScrollJourney() {
       const nx = ((Math.sin(t * 1.3) + 0.5 * Math.sin(t * 3.7)) / 1.5) * 2.0 * amp;
       const ny = ((Math.sin(t * 1.7) + 0.6 * Math.sin(t * 2.9)) / 1.6) * 1.5 * amp;
       const nr = Math.sin(t * 1.1) * 0.08 * amp;
+      const tx = -cur.x * 15 + nx, ty = -cur.y * 12 + ny;
       const el = sway.current;
       if (el) {
-        const tx = -cur.x * 15 + nx, ty = -cur.y * 12 + ny;
         const ry = cur.x * 1.4, rx = -cur.y * 1.1;
         el.style.transform = `translate3d(${tx.toFixed(2)}px, ${ty.toFixed(2)}px, 0) rotateX(${rx.toFixed(2)}deg) rotateY(${ry.toFixed(2)}deg) rotate(${nr.toFixed(3)}deg) scale(1.035)`;
+      }
+      // L1:立柱層多走的那一段。除以 1.035 是因為這個 transform 活在已經被 sway 縮放過的
+      // 座標系裡 —— 螢幕上真正多走的就是 (K-1)×(tx, ty)。A1 底噪(nx/ny)包在 tx/ty 裡,
+      // 所以它自動同係數放大,不必另外處理。
+      // 寫 inline transform 而不是 CSS 變數(A6 的 --glass-x/y 是那樣寫的):自訂屬性會
+      // 繼承,寫在 sway 上等於每幀讓整個車廂子樹重算樣式,而這裡只有一個元素在讀它。
+      const fr = front.current;
+      if (fr) {
+        const k = (frontK - 1) / 1.035;
+        fr.style.transform = `translate3d(${(k * tx).toFixed(2)}px, ${(k * ty).toFixed(2)}px, 0) scale(${FRONT_SCALE_REL})`;
       }
       // A6:玻璃比景多動 ±3.5px(近的東西動得多)。觸控裝置恆 0 —— 沒有游標就沒有視角,
       // 但靜態反光層留著,那是玻璃的實體感,不是互動。
@@ -296,6 +342,7 @@ export function ScrollJourney() {
     raf = requestAnimationFrame(tick);
     return () => {
       window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("resize", onResize);
       document.removeEventListener("visibilitychange", onVis);
       mqReduce.removeEventListener("change", onReduce);
       mqFine.removeEventListener("change", onFine);
@@ -354,7 +401,7 @@ export function ScrollJourney() {
               ref={sway}
               style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", placeContent: "center", transformStyle: "preserve-3d", willChange: "transform" }}
             >
-              <CabinComposite bus={bus} scene={cur.scene} ledText={t(cur.led)} />
+              <CabinComposite bus={bus} scene={cur.scene} ledText={t(cur.led)} frontRef={front} />
             </div>
             <StationPanel station={cur} visible={d.panelVisible} />
             {d.routeVisible && <RouteMap index={d.index} onJump={jumpTo} />}

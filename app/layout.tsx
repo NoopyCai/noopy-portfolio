@@ -75,6 +75,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="preload" as="font" type="font/woff2" href="/fonts/DepartureMono-Regular.woff2" crossOrigin="anonymous" />
         {/* 車廂圖只有進 ride 相位才進 DOM,不 preload 的話第一次搭車必然看到 pop-in */}
         <link rel="preload" as="image" href="/cabin.jpg" fetchPriority="high" />
+        {/* 立柱前景層(L1)。和車廂圖同時要用到:晚一步到貨就是「立柱憑空長出來」,
+            而它同時也是門場景背板的合成素材。63 KB,fetchPriority 刻意留低 —— 它不是
+            LCP 候選,不該和 cabin.jpg / 字型搶第一屏的頻寬。 */}
+        <link rel="preload" as="image" href="/cabin/cabin-front.png" />
         <script
           type="application/ld+json"
           /* `<` 轉義:JSON 字串裡若出現 </script 會提前關掉這個標籤 */

@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { drawScene } from "@/lib/scene";
+import { drawScene, type SceneLayerKind } from "@/lib/scene";
 import { useFrame, setShown, type FrameBus } from "@/lib/frame";
 import type { SceneType } from "@/content/stations";
 
@@ -10,40 +10,60 @@ const PAN_LOOPS = 1; // 每站約平移一圈(地標經過一次)
 
 let uid = 0;
 
-// drawScene 是逐像素迴圈(單張 ~108k 次 fillRect)。六站 × {bg,full} 最多 12 張,
-// 快取起來:換站從 4 次重繪降到 0,來回捲動也不再重畫。約 5MB。
+// A3 深度層:中央窗拆成遠近兩層,以不同的平移倍率疊起來(遠山慢、近景快)。
+// 0.35 是「讀得出差速、又不會讓遠山變成另一個世界」的值:一站之內近景走完整整一圈
+// (PAN_LOOPS),遠層只走 0.35 圈 —— 遠山因此在整段旅程裡都還在同一片天空底下。
+// 兩層是同一組 draw call 的分割(見 lib/scene.ts),同 pan 疊起來就等於原本的完整版。
+const DEPTH: { layer: SceneLayerKind; factor: number }[] = [
+  { layer: "far", factor: 0.35 },
+  { layer: "near", factor: 1 },
+];
+const FLAT: { layer?: SceneLayerKind; factor: number }[] = [{ factor: 1 }];
+// 月台不拆:站內場景,遠近同一個屋簷下,而站名燈牌是地標(理由見 lib/scene.ts)。
+const isSplittable = (scene: SceneType) => scene !== "platform";
+
+// drawScene 是逐像素迴圈(單張 ~108k 次 fillRect)。快取起來:換站從 4 次重繪降到 0,
+// 來回捲動也不再重畫。key 加上 layer 之後,一站最多 4 張:
+//   `bg|-`(左右窗的完整版)、`bg|far`、`bg|near`、`full|near`
+// far 沒有 `full` 變體 —— 它不畫地標,bg 與 full 是同一張圖,所以下面直接把 bg 釘成 true。
+// 全程走完六站(五個戶外站 ×4 + 月台 ×2)= 22 張 ≈ 9MB;實際只有走過的站才會建。
 const sceneCache = new Map<string, HTMLCanvasElement>();
-function getScene(scene: SceneType, bg: boolean) {
-  const key = `${scene}|${bg}`;
+function getScene(scene: SceneType, bg: boolean, layer?: SceneLayerKind) {
+  const b = layer === "far" ? true : bg;
+  const key = `${scene}|${b}|${layer ?? "-"}`;
   let c = sceneCache.get(key);
   if (!c) {
     c = document.createElement("canvas");
-    drawScene(c, scene, { bg });
+    drawScene(c, scene, { bg: b, layer });
     sceneCache.set(key, c);
   }
   return c;
 }
 
 // 從 3×寬長條 [bg | full(含地標) | bg] 取一個 window 寬的切片,隨 pan 環繞平移 → 行駛感,且地標不重複。
-function blit(c: HTMLCanvasElement | null, strip: HTMLCanvasElement | null, pan: number) {
-  if (!c || !strip) return;
-  const SW = strip.width, H = strip.height, W = Math.round(SW / 3);
+// 多層時由遠而近依序畫在同一張 canvas 上(不是多個 canvas 疊 DOM):合成層數不變,
+// 每層各自做整數對齊 —— 像素風景不能有次像素平移,那會讓抖色圖案爬行閃爍。
+function blit(c: HTMLCanvasElement | null, layers: { strip: HTMLCanvasElement; factor: number }[], pan: number) {
+  if (!c || !layers.length) return;
+  const SW = layers[0].strip.width, H = layers[0].strip.height, W = Math.round(SW / 3);
   if (c.width !== W) c.width = W;
   if (c.height !== H) c.height = H;
   const g = c.getContext("2d")!;
   g.imageSmoothingEnabled = false;
-  const off = Math.round(((((pan * PAN_LOOPS) % 1) + 1) % 1) * SW); // 整數對齊,避免抖色爬行閃爍
   g.clearRect(0, 0, W, H);
-  g.drawImage(strip, -off, 0);
-  g.drawImage(strip, SW - off, 0);
+  for (const { strip, factor } of layers) {
+    const off = Math.round(((((pan * factor * PAN_LOOPS) % 1) + 1) % 1) * SW); // 整數對齊,避免抖色爬行閃爍
+    g.drawImage(strip, -off, 0);
+    g.drawImage(strip, SW - off, 0);
+  }
 }
 
 // 3× 長條的組裝(bg | full | bg)。抽出來給 SceneLayer 與 PlatformLayer 共用 ——
 // 兩者都走 getScene 的 Map 快取(坑 8),長條本身只是三次 drawImage,建一次就放著。
-function buildStrip(scene: SceneType, bg: boolean) {
-  const full = getScene(scene, bg);
+function buildStrip(scene: SceneType, bg: boolean, layer?: SceneLayerKind) {
+  const full = getScene(scene, bg, layer);
   const W = full.width, H = full.height;
-  const bgc = bg ? full : getScene(scene, true); // 背景層(無地標):讓地標只在中段出現一次
+  const bgc = bg || layer === "far" ? full : getScene(scene, true, layer); // 背景層(無地標):讓地標只在中段出現一次
   const strip = document.createElement("canvas");
   strip.width = W * 3;
   strip.height = H;
@@ -123,7 +143,9 @@ export function Window({
       }}
     >
       {layers.map((l) => (
-        <SceneLayer key={l.id} bus={bus} scene={l.scene} bg={bg} pos={rect.pos} on={l.on} />
+        // A3:只有中央窗拆遠近兩層。左右窗在構圖裡只露出一條窄縫(寬 7%),
+        // 差速在那個寬度裡讀不出來,卻要多付一倍的 blit。
+        <SceneLayer key={l.id} bus={bus} scene={l.scene} bg={bg} pos={rect.pos} on={l.on} depth={center} />
       ))}
       {/* B2:月台層。pan 與主窗景同源,B1 的減速曲線因此免費繼承 —— 月台滑進來、隨停站定格。
           三扇窗都疊:只給中央窗的話,進站時會變成「中央窗是夜間月台、左右窗還是白天藍天」
@@ -145,13 +167,13 @@ export function Window({
 // blit 只在 opacity > 0(dist < 0.12)時執行:巡航段這一層完全不畫,零成本。
 function PlatformLayer({ bus, pos, bg }: { bus: FrameBus; pos: string; bg: boolean }) {
   const ref = useRef<HTMLCanvasElement>(null);
-  const buf = useRef<HTMLCanvasElement | null>(null);
+  const buf = useRef<{ strip: HTMLCanvasElement; factor: number }[] | null>(null);
   useFrame(bus, () => {
     const op = bus.frame.platform;
     const c = ref.current;
     if (c) c.style.opacity = String(op);
     if (op <= 0) return; // 巡航段:不 blit
-    if (!buf.current) buf.current = buildStrip("platform", bg); // 第一次真的要用到才建(第 0 站永遠不會走到這裡)
+    if (!buf.current) buf.current = [{ strip: buildStrip("platform", bg), factor: 1 }]; // 第一次真的要用到才建(第 0 站永遠不會走到這裡)
     blit(c, buf.current, bus.frame.x);
   });
   return (
@@ -173,15 +195,16 @@ function PlatformLayer({ bus, pos, bg }: { bus: FrameBus; pos: string; bg: boole
   );
 }
 
-function SceneLayer({ bus, scene, bg, pos, on }: { bus: FrameBus; scene: SceneType; bg: boolean; pos: string; on: boolean }) {
+function SceneLayer({ bus, scene, bg, pos, on, depth = false }: { bus: FrameBus; scene: SceneType; bg: boolean; pos: string; on: boolean; depth?: boolean }) {
   const ref = useRef<HTMLCanvasElement>(null);
-  const buf = useRef<HTMLCanvasElement | null>(null);
+  const buf = useRef<{ strip: HTMLCanvasElement; factor: number }[] | null>(null);
   useEffect(() => {
-    const strip = buildStrip(scene, bg);
-    buf.current = strip;
-    blit(ref.current, strip, bus.frame.x);
+    const plan = depth && isSplittable(scene) ? DEPTH : FLAT;
+    const strips = plan.map((l) => ({ strip: buildStrip(scene, bg, l.layer), factor: l.factor }));
+    buf.current = strips;
+    blit(ref.current, strips, bus.frame.x);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scene, bg]);
+  }, [scene, bg, depth]);
   // 每幀重畫的只有這一句 drawImage ×2;訂閱時的立即套用讓新掛上來的那層(換站 crossfade
   // 的上層)不必等下一次捲動就有正確的切片。
   useFrame(bus, () => {

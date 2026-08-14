@@ -369,14 +369,29 @@ export function createDoorScene(canvas: HTMLCanvasElement, onReady: () => void):
   //   · 座標吃 lib/progress 的 LED_RECT —— 那是 DOM 端在用的同一組實測百分比,唯一來源
   //   · 顏色吃 .led 的 #050805 —— 交棒瞬間這塊區域兩邊同色,跑馬燈亮起就純粹是「設備通電」
   // enter / exit 共用這一張背板,所以改這裡兩個模式都好。
+  //
+  // L1 之後這張背板還要**先合成立柱層**:DOM 車廂從這一版起多了 cabin-front.png,
+  // 背板若還是無立柱的原圖,交棒那 15% 的 crossfade 會變成「兩根柱子憑空淡入」——
+  // 物體不會無中生有,那一下比沒有立柱更假。合成的比例是 1.06 ÷ 1.035 = 1.0241546,
+  // 也就是 .cabin-front 相對於 sway 的那一層放大;背板本身已經帶著 sway 的 1.035
+  // (見下面的 cover 計算),兩者相乘剛好等於 DOM 前景在螢幕上的 1.06。
+  // 交棒瞬間滑鼠視差與 A1 底噪都已經收斂到 0(doorP < 1 時 sway 迴圈的 active 是 false),
+  // 所以「靜止時對位」就是這個純縮放對得上 —— 動態位移不必也不能在背板裡模擬。
   const LED_BLANK = "#050805";
-  loader.load("/cabin.jpg", (tex) => {
-    const img = tex.image as CanvasImageSource & { width: number; height: number };
+  const FRONT_REL_SCALE = 1.06 / 1.035;
+  let cabinImg: (CanvasImageSource & { width: number; height: number }) | null = null;
+  let frontImg: HTMLImageElement | null = null;
+  const buildBackdrop = () => {
+    if (!cabinImg) return;
     const c = document.createElement("canvas");
-    c.width = img.width;
-    c.height = img.height;
+    c.width = cabinImg.width;
+    c.height = cabinImg.height;
     const g = c.getContext("2d")!;
-    g.drawImage(img, 0, 0);
+    g.drawImage(cabinImg, 0, 0);
+    // LED 塗黑排在立柱**之前**:橫杆上緣與 LED 底緣相交約 0.9%(靜止時螢幕上 ~8px),
+    // 而 DOM 那邊是橫杆蓋住 LED 面板(CabinComposite 的節點順序 —— 橫杆比牆面顯示器
+    // 更靠近觀者)。兩邊順序必須一致,不然交棒的 crossfade 會在那一條 8px 的縫裡
+    // 「橫杆上緣憑空淡入」,正是立柱本身要避免的那個瑕疵。
     g.fillStyle = LED_BLANK;
     g.fillRect(
       Math.round((LED_RECT.left / 100) * c.width),
@@ -384,13 +399,28 @@ export function createDoorScene(canvas: HTMLCanvasElement, onReady: () => void):
       Math.round((LED_RECT.w / 100) * c.width),
       Math.round((LED_RECT.h / 100) * c.height),
     );
+    if (frontImg) {
+      const w = c.width * FRONT_REL_SCALE, h = c.height * FRONT_REL_SCALE;
+      g.drawImage(frontImg, (c.width - w) / 2, (c.height - h) / 2, w, h);
+    }
     const blanked = new CanvasTexture(c); // 預設 filter 與 TextureLoader 給的一致,不用另設
     blanked.colorSpace = SRGBColorSpace;
+    const prev = cabinMat.map;
     cabinMat.map = blanked;
     cabinMat.color.set(0xffffff);
     cabinMat.needsUpdate = true;
+    prev?.dispose(); // 立柱晚到時會重建一次:舊的那張要還給 GPU(dispose 貼圖沒有坑 10 的問題,那說的是 context)
     onReady();
+  };
+  loader.load("/cabin.jpg", (tex) => {
+    cabinImg = tex.image as CanvasImageSource & { width: number; height: number };
+    buildBackdrop();
   });
+  // 立柱層走原生 Image 而不是 TextureLoader:它只是拿來畫進 canvas 的素材,不需要
+  // 變成 GPU 貼圖。載不到就維持無立柱的背板 —— 和 DOM 端 front 載入失敗是同一種降級。
+  const fi = new Image();
+  fi.onload = () => { frontImg = fi; buildBackdrop(); };
+  fi.src = "/cabin/cabin-front.png";
 
   // ── 燈光 ───────────────────────────────────────────────────────────────────
   scene.add(new AmbientLight(0x37506b, 1.15)); // 夜的冷調環境光(月台燈的漫射)

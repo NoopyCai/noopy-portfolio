@@ -51,6 +51,40 @@ a { color: var(--green); }
 
 @media (prefers-reduced-motion: reduce) { .led-run { animation: none; } }
 
+/* L1 前景層(立柱 + 頂端橫杆)。與車廂基底同一組 cover 幾何(它是父層的 100% 寬,
+   而父層就是 max(100vw, 177.68vh) 的那一塊),差別只有兩件事:
+     · scale(1.0241546) —— 這是**相對於 sway 那層的 1.035** 再放大出來的:
+       1.035 × 1.0241546 = 1.06,也就是前景在螢幕上的實際過掃描(推導見 ScrollJourney)。
+       寫成相對值而不是 1.06,是因為 sway 的 scale 已經套在父層,子層的 transform 疊在它之上。
+     · 位移由 sway 迴圈每幀改寫這裡的 transform(同樣是父層座標系的值,會再被 1.035
+       放大一次,所以迴圈那邊除掉了 1.035)。這裡寫的 scale 是**第一幀的預設值** ——
+       元件剛掛載到第一次 rAF 之間如果沒有它,立柱會有一幀是 1.0 倍。
+   門場景的背板貼圖用完全相同的 1.0241546 把立柱合成上去,交棒時兩邊的立柱才會重合。
+   它是一個**容器**而不是那張 img 本身:立柱移到 LED 之後(見 CabinComposite 的節點順序
+   註解)就同時移出了 tint 色片的覆蓋範圍,所以裡面除了 img 還要放一層自己的 tint。
+   inset:0 = 父層的內容框 = 底圖框,而前景 PNG 與 cabin.jpg 是同一組尺寸(1672×941),
+   所以裡面的 img 給 100%/100% 與原本的 height:auto 等價(換基底時兩張要一起換)。 */
+.cabin-front {
+  position: absolute; inset: 0;
+  pointer-events: none;
+  transform: scale(1.0241546);
+  will-change: transform;
+}
+.cabin-front img { width: 100%; height: 100%; display: block; }
+/* 立柱層自己的 tint:用**同一張 PNG 當遮罩**,所以只作用在立柱/橫杆的像素上。
+   遮罩不是為了省算力,是正確性:soft-light 混的是「底下已經畫好的東西」,而 alpha = 0
+   的地方 backdrop 是透明的 —— 沒有遮罩就會直接塗上 tint 原色,變成蓋住整個畫面的一層
+   色紗(而且是疊在底圖那層 tint 之上,雙重上色)。
+   幾何與外層一致(容器已經帶著 scale 與每幀位移,這裡不必再寫 transform)。
+   顏色與 mix-blend-mode 由 CabinComposite 給:blend 吃 GRADE_BLEND 常數,和底圖那層
+   共用唯一來源;background 由 frame bus 每幀寫成 grade.tint。 */
+.cabin-front-tint {
+  position: absolute; inset: 0;
+  -webkit-mask-image: url(/cabin/cabin-front.png); mask-image: url(/cabin/cabin-front.png);
+  -webkit-mask-size: 100% 100%; mask-size: 100% 100%;
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+}
+
 /* 車窗玻璃(A6):一道斜向反光帶 + 兩角水氣。總不透明度上限 0.05 ——「極淡」是規格不是保守,
    窗景本來就是夜景,任何一點多餘的白都會把層次洗掉。兩角的 radial 刻意擺在反光帶(47–53%)
    打不到的對角,疊加後仍在上限內。

@@ -37,8 +37,9 @@ components/
   Door3D.tsx            車門開啟過場的 React 殼(canvas + dynamic import three + 餵 progress)
   door3d/scene.ts       ★ 過場的 three.js 場景(純函式,非 React;一個 render(doorP) 畫一幀)
   door3d/textures.ts    門板 / 月台警戒條 / 光楔 / 門縫光的程序貼圖(canvas,無外部圖檔)
-  CabinComposite.tsx    車廂照 + 三扇車窗 + LED + 燈光 grade overlay
-  Window.tsx            單扇車窗:scene crossfade + 隨捲動水平流動(canvas blit)
+  CabinComposite.tsx    車廂照(back)+ 三扇車窗 + LED + grade + 立柱前景層(front,.cabin-front,
+                        節點順序最後 —— 橫杆要從跑馬燈前面掠過,見下方「前景立柱層」)
+  Window.tsx            單扇車窗:scene crossfade + 隨捲動水平流動(canvas blit);中央窗拆遠近兩層
   StationPanel.tsx      作品資訊卡(liquid glass)+「看細節」modal
   RouteMap.tsx          右側六站進度點,點擊跳站
   Concourse.tsx         出站大廳(ConcourseHero 由轉場與正式區塊共用,確保交棒無縫)
@@ -49,12 +50,15 @@ lib/
   progress.ts           相位數學 + 車窗/LED 座標(cabin.jpg 實測百分比;換基底必須重量,量法見
                         docs/ai-illustration-prompts.md §E。LED_RECT 是唯一來源:DOM 跑馬燈的
                         定位框與門場景背板「把烤死字塗黑」的矩形共用它)
-  scene.ts              ★ 六種窗景的逐像素 canvas 繪製(純函式,無動畫)
+  scene.ts              ★ 六種窗景的逐像素 canvas 繪製(純函式,無動畫)。`layer: "far" | "near"`
+                        把一個場景拆成遠近兩張(A3 深度層);不傳 = 完整版,舊呼叫端不受影響
+  frame.ts              捲動連續量的 ref 通道(階段 0):applyFrame 直寫 → 訂閱者寫 DOM,零 re-render
 content/stations.ts     六站全部內容(雙語)。改文案只動這裡
 public/
   cabin.jpg             ★ 全站的車廂基底(1672×941,150 KB)。2026-08 換成**無立柱**的新版
-  cabin/cabin-front.png   立柱+橫杆去背層(2715×1528 RGBA,119 KB)。**目前還沒接進 DOM**,
-                          是 3D 化階段 1 的視差前置素材(spec:docs/specs/3d-stages-2026-08.md)
+  cabin/cabin-front.png   立柱+橫杆去背層(1672×941 RGBA,63 KB)。3D 化階段 1 已接進 DOM
+                          (CabinComposite 的 front 層,視差係數見下);門場景的背板也會把它
+                          合成上去,不然交棒時立柱會憑空淡入
 ```
 
 ### 相位
@@ -88,6 +92,20 @@ public/
 - render-on-demand：只有 `progress` / `active` 變或 `ResizeObserver` 觸發才畫一幀。`setPixelRatio(min(dpr, 2))`、沒有 shadow map、整個場景 **76 個三角形 / 23 draw calls**（末幀只剩 10 / 4，其餘被相機切掉）。`display:none` 期間 `clientWidth = 0`，`render` 直接 return（畫了只會把 buffer 縮成 0）。
 - dev 下 `window.__door3d.stats()` 可以讀三角形數、draw calls、`isContextLost()`、相機 z（production 不掛）。
 
+### 前景立柱層(L1 拆層視差)
+
+車廂不再是一張圖：`cabin.jpg`（無立柱的 back）+ `cabin/cabin-front.png`（立柱 ×2 + 頂端橫杆的 alpha 層，1672×941、63 KB，與基底同一格網）。兩張同一組 cover 幾何，front 是 `CabinComposite` 的**最後一個節點**——tint／隧道／窗／LED 全部畫在它底下。
+
+**為什麼是最後：**橫杆（圖上 y 10.5–12.6%，再被 front 自己的 1.024 過掃描往上推）與 LED 顯示區（`LED_RECT` 到 y 10.4%）在螢幕上本來就擦邊，而視差讓 front 垂直多走到 ±23px。舊層序（LED 最後畫）在滑鼠推到右下角時，實測橫杆上緣被 LED 面板吃掉 **17px**——那 17px 讀到的是 `#050805` 的面板底色，而橫杆物理上比牆面顯示器更靠近觀者，深度是反的。改成 front 最後畫之後，同一個取樣帶的亮度 7.1 → 229（靜止）／153（最大視差）＝橫杆確實在跑馬燈前面；跑馬燈的字是垂直居中的，被遮的只有面板下緣的空白帶。
+
+- **視差係數 K = 1.7**（直式降到 1.25，依 aspect 插值），寫在 `ScrollJourney` 的 sway 迴圈裡：front 的螢幕位移 = K × sway 的位移（A1 底噪自動同係數放大）。
+- **front 自帶 `scale`**：sway 的 1.035 過掃描蓋不住多走的位移（1440×900 垂直餘裕 15.75px < 需求 22.95px，差 7.2px），所以 front 在螢幕上是 **1.06**＝1.035 × `1.0241546`。**`1.0241546` 有三處必須同步**：`ScrollJourney` 的 `FRONT_SCALE_REL`、`globals.css` 的 `.cabin-front`（第一幀預設值）、`door3d/scene.ts` 的 `FRONT_REL_SCALE`（背板合成）。
+- **front 自帶 tint，而且必須用同一張 PNG 當遮罩**：前景排到 LED 之後就吃不到底圖那片 `inset: 0` 的 tint 色片了，所以 `.cabin-front` 是個**容器**，裡面是 img（`grade.filter` 寫在 img 上，不是容器上，見坑 13 的同一個理由）+ 一層 `.cabin-front-tint`（同色同 `GRADE_BLEND`）。**遮罩不是為了省算力而是正確性**：soft-light 混的是「底下已經畫好的東西」，alpha = 0 的地方 backdrop 是透明的 → 沒有遮罩就會直接塗上 tint 原色，變成蓋住整個畫面、疊在底圖 tint 之上的雙重色紗。少了這一層的代價實測過：立柱色相會定住（river 站 R 偏 **+10/255**、city 站 **−9**，ΔE ≈ 6，1× 下讀得出來是「另一種金屬」，而且與車廂壁的暖冷關係在曲線兩端**反向**）；補上之後六站立柱的 RGB 與舊層序差 **≤ 0.4/255**。隧道的 lift/sweep 仍然掃不到立柱（差 ≤ 1.7/255，L2 才有真深度掃光）。
+- **門場景的背板要先合成立柱**：背板是 cabin.jpg 原圖，DOM 車廂卻有立柱 → 交棒 crossfade 會變成「柱子憑空淡入」。所以背板貼圖在上傳前用同樣的 1.0241546 把 front 疊上去（順序：cabin → **LED 塗黑 → front**，和 DOM 的節點順序一致——順序反了，交棒就會在橫杆／LED 那條 8px 的縫裡閃一下）。交棒瞬間滑鼠視差與底噪都收斂到 0，所以純縮放就對得上：實測背板與 DOM 立柱的欄剖面互相關 **lag −0.40 / −0.50 px**（1440×900 兩根柱），橫杆的列剖面 **+0.06 px**（直式 +0.03 px；層序修正前是 −0.38/−0.47 與 +0.08/+0.05，同一量級，橫杆的 corr 從 0.982 升到 0.988）。
+- **末幀對位重驗**（參考圖同樣合成 front + 塗黑 LED —— 少了 LED 那一步，橫杆上緣被面板蓋住的那一條帶子會讓 corrY 掉到 0.96）：1920×958 `dx +0.042 / dy +0.024`（corr 0.9992 / 0.9996）、1440×900 `dx +0.029 / dy +0.054`、390×844 `dx +0.017 / dy +0.028` —— 與換基底那輪（+0.045/+0.024）同一量級。
+- **fallback**：front 載入失敗 → `onError` 把**整個容器**收成 `display: none`（連 tint 那層一起——遮罩用的是同一張圖，圖沒了遮罩也沒了，只留 tint 就是一片色紗），畫面就是無立柱的 back，其餘完全不受影響（門場景那邊也一樣，背板退回原圖）。
+- **中央窗的遠近層（A3）**：`drawScene` 的 `layer` 參數把場景拆成 `far`（天空／星／雲／遠山／中景剪影）與 `near`（近景建物／地面／前景物件／**全部地標**），中央窗把兩層畫進同一張 canvas、平移倍率 0.35 / 1.0（左右窗維持單層，那道 7% 寬的窄縫讀不出差速）。月台站不拆（站內場景，而且站名燈牌是地標）。地標一律留在 near 的理由見坑 8。
+
 ## 踩過的坑（改動前務必讀）
 
 1. **不要用 GSAP ScrollToPlugin。** 它與 pinned + scrub 的 ScrollTrigger 會回饋成死迴圈而凍結整頁。用 `ScrollJourney.tsx` 裡自己寫的 `smoothScrollTo`（逐幀 `window.scrollTo`，會觸發真實 scroll 事件）。
@@ -104,15 +122,17 @@ public/
 
 7. **Departure Mono 是單一字重，永遠不要 `font-weight: 700`。** synthetic bold 會把 bitmap 邊緣往外糊一格、破壞像素網格。要更重就加大字級或用 `text-shadow` 光暈。
 
-8. **`drawScene` 有 module-scope 的 Map 快取**（`Window.tsx`）。它是逐像素迴圈（單張約 108k 次 `fillRect`），六站 × `{bg, full}` 最多 12 張。不要繞過快取直接呼叫。
+8. **`drawScene` 有 module-scope 的 Map 快取**（`Window.tsx`）。它是逐像素迴圈（單張約 108k 次 `fillRect`），key 是 `scene|bg|layer`：一個戶外站最多 4 張（左右窗的完整版、中央窗的 `far`、`near-bg`、`near-full`），月台 2 張，全程走完六站 = 22 張 ≈ 9 MB。**`far` 層永遠不畫地標**，所以它的 `bg` 與 `full` 是同一張（`getScene` 直接把 bg 釘成 true）——地標的「每站出現一次」靠的是 `[bg | full | bg]` 三段長條加上每站一圈的 pan，而 far 只走 0.35 圈。不要繞過快取直接呼叫。
 
-9. **字型與 `cabin.jpg` 都在 `layout.tsx` 裡 preload。** cabin.jpg 只有進 ride 相位才進 DOM，沒有 preload 的話第一次搭車必然看到 pop-in。它同時是 LCP 候選，所以壓縮預算是 **≤ 500 KB**（現在 150 KB；4:4:4 不要動——圖裡的告示與海報都是小字，色度取樣一減就糊）。**下次換基底請盡量拿到原生 2× 尺寸**：現行 1672×941 在 1920 寬的桌機已經要放大 1.19×（retina 再 ×2），②之前的 2715×1528 版本沒有這個問題。
+9. **字型、`cabin.jpg`、`cabin/cabin-front.png` 都在 `layout.tsx` 裡 preload。** cabin.jpg 只有進 ride 相位才進 DOM，沒有 preload 的話第一次搭車必然看到 pop-in。它同時是 LCP 候選，所以壓縮預算是 **≤ 500 KB**（現在 150 KB；4:4:4 不要動——圖裡的告示與海報都是小字，色度取樣一減就糊）。**下次換基底請盡量拿到原生 2× 尺寸**：現行 1672×941 在 1920 寬的桌機已經要放大 1.19×（retina 再 ×2），②之前的 2715×1528 版本沒有這個問題。
 
 10. **`Door3D` 不可以條件式掛載，cleanup 也不可以 `loseContext()` / `renderer.dispose()`。** 一個 `<canvas>` 一輩子只有一個 WebGL context（`getContext` 對同一元素永遠回傳同一物件），被 `loseContext()` 殺掉就再也活不過來。舊寫法是「離開門相位就卸載」+ cleanup 呼叫 `loseContext()`，於是上下捲一趟就建/毀一次 context；dev 的 StrictMode 更會 mount→cleanup→mount，第二次拿到的正是剛被殺掉的 context，之後所有 `gl.*` 都是 no-op（實測 `isContextLost() === true`）→ **整頁白屏**，而且 refresh 才會好。現在：永遠掛載、用 `display:none` 收起來、只在真的離開頁面時交給瀏覽器回收，另外掛 `webglcontextlost`/`restored` 做二次保險。
 
 11. **門場景裡的 `emissive` 值要壓得很低（現在 0.16）。** emissive 不吃幾何明暗，值一大就是一塊死平的純色；而 dolly 到中段時相機正好貼著兩根門柱掠過，那兩個側面各佔近 1/10 螢幕 —— 實測 `emissiveIntensity = 0.55` 會變成兩條純 `#ff9a3c` 的橘柱，把整個推軌鏡頭染成橘色。要更亮請加 additive 的光片（像 `wedge` / `slit`），不要調 emissive。
 
 12. **`ScrollJourney` 的開頁 `scrollTo(0, 0)` 用 module-scope 旗標擋住。** effect 在 StrictMode/HMR 下會 re-run，那時使用者可能已經在車廂裡，再歸零一次會把人硬拉回月台（`scrollRestoration = "manual"` 要保留，那個沒問題）。
+
+13. **`cabin.jpg` 與立柱前景層的 grade `filter` 要各套一次，不要包一層 div 一起套。** 包起來省一趟濾鏡（4× throttle 下 p50 反而比階段 0 還快），代價是那一層會先被光柵化成一張圖、再交給 sway 的 `scale(1.035)` 縮放 —— 等於多一次重取樣，實測車廂圖上的小字會軟掉（博愛座海報區的橫向梯度能量 −15%、告示區 −6%）。cabin.jpg 在 1920 寬的桌機本來就要放大 1.19×（坑 9），禁不起再軟一次。這一項是**畫質優先於幀時**的取捨，改動前請先量梯度能量。
 
 ## 慣例
 
