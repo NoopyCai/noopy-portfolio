@@ -1,17 +1,20 @@
 "use client";
 import { useRef } from "react";
 import { WIN, LED_RECT, gradeFilter } from "@/lib/progress";
-import { useFrame, setShown, type FrameBus } from "@/lib/frame";
+import { useFrame, type FrameBus } from "@/lib/frame";
 import { Window } from "./Window";
 import { LedSign } from "./LedSign";
 import { GRADE_BLEND, type SceneType } from "@/content/stations";
 
-// TunnelFx 的定義搬到 lib/frame.ts —— 它現在是 frame bus 的一個欄位,不再是這裡的 prop。
-
-// 靜態車廂圖 + 三扇 live 車窗(idx0 中央=完整,其餘 bg)+ LED 覆蓋 + 燈光分級 overlay。
+// 靜態車廂圖 + 三扇 live 車窗(idx0 中央=完整,其餘 bg)+ LED 覆蓋 + 燈光分級 overlay + 立柱層。
 //
-// 這個元件只吃**離散**的 props(scene / ledText,換站才變)。grade、pan、月台層、隧道層
-// 全部是連續量,走 frame bus 直接寫 DOM(階段 0,audit §4.3)—— 捲動時這裡零 re-render。
+// ⚠️ **這是 no-WebGL 的降級路徑**(L2a / Q3a:降規格凍結)。WebGL 可用時車廂整個在
+// three 場景裡(door3d/cabin.ts),這個元件不會掛載。降級版保留的是「內容與識別」——
+// 車廂、窗景、燈光曲線、跑馬燈、立柱視差;拿掉的是「氣氛」—— 隧道(A5)與月台層(B2),
+// 那兩者在 3D 場景裡是有深度的實作,DOM 再維護一套只會讓兩邊各自漂移。
+//
+// 這個元件只吃**離散**的 props(scene / ledText,換站才變)。grade 與 pan 是連續量,
+// 走 frame bus 直接寫 DOM(階段 0,audit §4.3)—— 捲動時這裡零 re-render。
 export function CabinComposite({
   bus,
   scene,
@@ -29,13 +32,9 @@ export function CabinComposite({
   const frontImg = useRef<HTMLImageElement>(null);
   const frontTint = useRef<HTMLDivElement>(null);
   const tint = useRef<HTMLDivElement>(null);
-  const lift = useRef<HTMLDivElement>(null);
-  const sweep = useRef<HTMLDivElement>(null);
-  const sweepBand = useRef<HTMLDivElement>(null);
-  const flash = useRef<HTMLDivElement>(null);
 
   useFrame(bus, () => {
-    const { grade, tunnel } = bus.frame;
+    const { grade } = bus.frame;
     // 立柱層吃**同一組** grade:少了這行,傍晚出發、天亮到站的燈光曲線會整趟繞過立柱,
     // 車廂由暖轉冷而立柱定色不動 —— 那比沒有立柱還糟。
     // 兩張圖各套一次,而不是包一層 div 套一次:filter 會讓那一層先光柵化成一張圖再交給
@@ -50,21 +49,6 @@ export function CabinComposite({
     if (tint.current) tint.current.style.background = grade.tint;
     // 立柱層的 tint 與底圖那層同色同 blend,差別只有遮罩(見 globals.css)
     if (frontTint.current) frontTint.current.style.background = grade.tint;
-    // 隧道三層:區間外收成 display:none(等價於舊的條件式掛載 —— 不進 paint、不產生
-    // 合成層,只是不再需要一次 re-render 才能掛上來)。
-    const on = tunnel !== null;
-    setShown(lift.current, on);
-    setShown(sweep.current, on);
-    if (tunnel) {
-      if (lift.current) lift.current.style.opacity = String(tunnel.lift);
-      if (sweepBand.current) {
-        sweepBand.current.style.transform = `translate3d(${-tunnel.sweep.toFixed(2)}%, 0, 0)`;
-        sweepBand.current.style.opacity = tunnel.lift > 0 ? "1" : "0";
-      }
-    }
-    const flashOn = tunnel !== null && tunnel.flash > 0;
-    setShown(flash.current, flashOn);
-    if (flashOn && flash.current) flash.current.style.opacity = String(tunnel!.flash);
   });
 
   return (
@@ -83,17 +67,9 @@ export function CabinComposite({
         ref={tint}
         style={{ position: "absolute", inset: 0, pointerEvents: "none", mixBlendMode: GRADE_BLEND as React.CSSProperties["mixBlendMode"] }}
       />
-      {/* 隧道的兩層「車內光」擺在窗**之前**:光帶掃的是車廂內壁,不該把壓暗的窗景又提亮。
-          用 % / inset 定位,直式 cover 裁切下位置自然跟著對(不寫死 px)。 */}
-      <div ref={lift} className="tunnel-lift" style={{ display: "none" }} />
-      <div ref={sweep} className="tunnel-sweep" style={{ display: "none" }}>
-        <div ref={sweepBand} className="tunnel-sweep-band" />
-      </div>
       {WIN.map((r, i) => (
-        <Window key={i} bus={bus} scene={scene} rect={r} bg={i !== 0} center={i === 0} />
+        <Window key={i} bus={bus} scene={scene} rect={r} bg={i !== 0} />
       ))}
-      {/* 出洞回光:蓋在窗之上(光是從窗外潑進來的),但擺在 LED 之前,跑馬燈不該被洗白 */}
-      <div ref={flash} className="tunnel-flash" style={{ display: "none" }} />
       <div style={{ position: "absolute", left: `${LED_RECT.left}%`, top: `${LED_RECT.top}%`, width: `${LED_RECT.w}%`, height: `${LED_RECT.h}%` }}>
         <LedSign text={ledText} />
       </div>

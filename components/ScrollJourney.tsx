@@ -9,7 +9,8 @@ import { phaseOf, doorProgress, rideProgress, exitProgress, exitDoorProgress, tu
 import { TOTAL_LEN, smoothScrollTo } from "@/lib/scroll";
 import { createFrameBus, useIsoLayoutEffect, type TunnelFx } from "@/lib/frame";
 import { CabinComposite } from "./CabinComposite";
-import { Door3D, type DoorApply } from "./Door3D";
+import { CabinFrame } from "./CabinFrame";
+import { Door3D, type DoorApply, type DoorFrame } from "./Door3D";
 import { StationPanel } from "./StationPanel";
 import { RouteMap } from "./RouteMap";
 import { ConcourseHero } from "./Concourse";
@@ -25,8 +26,26 @@ let didInitialReset = false;
 
 // L1 立柱前景層相對於 sway(1.035)的縮放:1.035 × 1.0241546 = 1.06,也就是前景在螢幕上的
 // 過掃描倍率。**這個數字有三處必須同步**:globals.css 的 .cabin-front(第一幀的預設值)、
-// door3d/scene.ts 合成背板時的 FRONT_REL_SCALE(交棒對位),以及這裡。
+// door3d/cabin.ts 的 FRONT_REL(場景版的立柱平面),以及這裡。
+// L2a 之後這裡只服務**降級路徑**(沒有 WebGL 的 DOM 車廂):場景版的立柱是場景裡的一個
+// 平面,滑鼠視差整片走 canvas 的 CSS transform,沒有獨立係數(見下方 tick 的註解)。
 const FRONT_SCALE_REL = 1.0241546;
+
+// 站切換 crossfade 的半寬(eased x 單位)。DOM 版是「換站 → 掛新層 → CSS transition .6s」,
+// 計時器驅動;L2a 改由 x 驅動,所以倒著捲就是倒著溶,而且完全不需要 re-render。
+//
+// 代價:x 驅動沒有時間軸,**停在正中間就會停在 50/50 的疊影上**(計時器版停久了會自己
+// 收斂到新的一站)。所以窗口要窄:0.07 換算成捲動約 93px(巡航段 dx/dscroll 最快的一段),
+// 兩三格滾輪就過完,而且 scrub 0.5 還會再平滑一次;真的停在那裡的機率被壓到最低。
+// [0.43, 0.57] 也完全落在停站窗口(dist < 0.15)之外 —— 卡片在讀的時候窗景不會在溶。
+const XFADE = 0.07;
+
+// L2a 的出站交棒:車廂與出站的門是**同一個 canvas**(坑 10:一個 canvas 一個 context),
+// 不能像 DOM 版那樣「車廂淡出」與「門淡入」兩層並存。所以門要等車廂那一層完全收乾才接手,
+// 而 e = 0.72 正是 camOpacity 歸零的那一點(EXIT_DOOR.start + 0.10)—— 交界兩側都是
+// 不透明度 0,接得上。代價是門比 DOM 版晚 ~0.04(e)出現,分鏡順序不變。
+const EXIT_HANDOFF = EXIT_DOOR.start + 0.10;
+const EXIT_HANDOFF_DP = (EXIT_HANDOFF - EXIT_DOOR.start) / (EXIT_DOOR.end - EXIT_DOOR.start);
 
 // 離散狀態:**只有這四個值變化才會 re-render**(audit §4.3 的整個重點)。
 // 連續量(x / grade / doorP / camera transform / 隧道與月台插值)全部走 applyFrame 直寫 DOM。
@@ -44,6 +63,8 @@ export function ScrollJourney() {
   const wrap = useRef<HTMLDivElement>(null);
   const stage = useRef<HTMLDivElement>(null);
   const sway = useRef<HTMLDivElement>(null);
+  const canvasWrap = useRef<HTMLDivElement>(null); // L2a:canvas 的外殼(自帶 3.5% 過掃描,不吃 sway 的 scale)
+  const frame3d = useRef<HTMLDivElement>(null); // L2a:疊在 canvas 車廂上的 DOM 層(LED + 玻璃)
   const front = useRef<HTMLDivElement>(null); // L1:立柱前景層的容器(img + 它自己的 tint),sway 迴圈直接寫它的 transform
   const camera = useRef<HTMLDivElement>(null); // A6:玻璃視差的 CSS 變數掛在這層,往下傳給每扇窗
   const gateBtn = useRef<HTMLButtonElement>(null);
@@ -57,10 +78,21 @@ export function ScrollJourney() {
   const [narrow, setNarrow] = useState(false); // 手機:轉場退化為 2.5D
   narrowRef.current = narrow;
 
+  // WebGL 能不能用(**用能力判斷,不用 UA/寬度**)。pending 期間先掛 DOM 車廂:
+  // 場景是在 idle callback 才 boot 的,而 gate 相位本來就閒著 —— 這樣任何時刻畫面上
+  // 都有一個車廂,不會有「兩邊都還沒好」的黑幀。ok 之後 DOM 那一套整個卸載。
+  const [gl, setGl] = useState<"pending" | "ok" | "fail">("pending");
+  const ride3dRef = useRef(false);
+  ride3dRef.current = gl === "ok";
+  const onGlStatus = useCallback((ok: boolean) => setGl(ok ? "ok" : "fail"), []);
+
   // 連續量的通道。frame 是就地改寫的單一物件,emit() 同步叫所有訂閱者(見 lib/frame.ts)。
   const busRef = useRef<ReturnType<typeof createFrameBus> | null>(null);
-  if (!busRef.current) busRef.current = createFrameBus(STATIONS[0].grade);
+  if (!busRef.current) busRef.current = createFrameBus(STATIONS[0].grade, STATIONS[0].scene);
   const bus = busRef.current;
+  // 送進 Door3D 的那一包。**就地改寫**同一個物件:每幀 new 一個在 4× throttle 的手機上
+  // 就是白給 GC 的壓力(和 frame bus 同一個理由)。
+  const doorFrame = useRef<DoorFrame>({ progress: 0, mode: "enter", active: true, fade: 1, frame: bus.frame });
 
   const [d, setD] = useState<Discrete>({ phase: "gate", index: 0, panelVisible: false, routeVisible: false });
   const dRef = useRef(d);
@@ -135,11 +167,19 @@ export function ScrollJourney() {
         }
       : null;
 
+    // L2a 站切換 crossfade:A = 正在離開的站、B = 正在進入的站,mix 由 x 插值。
+    // 中點(frac = 0.5)正好是 index 翻面的地方,所以 LED / 資訊卡換字與窗景換景同步。
+    const xc = clamp(x, 0, n - 1);
+    const li = Math.min(Math.floor(xc), n - 1);
+    const frac = xc - li;
     const f = bus.frame;
     f.x = x;
     f.grade = grade;
     f.platform = platform;
     f.tunnel = tunnel;
+    f.sceneA = STATIONS[li].scene;
+    f.sceneB = STATIONS[Math.min(li + 1, n - 1)].scene;
+    f.mix = smooth(clamp((frac - (0.5 - XFADE)) / (2 * XFADE)));
     bus.emit();
 
     // gate 按鈕:進門前先淡出,不要硬切消失
@@ -159,34 +199,59 @@ export function ScrollJourney() {
       : // 桌機真 3D:起身 + 轉身
         `translateY(${(rise * 9).toFixed(2)}vh) scale(${(1 + rise * 0.16).toFixed(3)}) ` +
         `rotateX(${(rise * 5).toFixed(2)}deg) rotateY(${(turn * -85).toFixed(2)}deg) translateX(${(turn * -14).toFixed(2)}vw)`;
-    // E1 重排的交棒窗口:.camera 在 e 0.62–0.75 淡出(正好是出站門淡入的那段),
-    // hero 則等到門快關上才浮出來(0.80–1.0)。三段刻意首尾相接而不重疊太多,
-    // 讀起來就是「轉身 → 門在身後關上 → 大廳亮起來」。
-    // 兩層**錯開**而不是等比對溶:車廂內裝與月台側的門是兩個不同的空間,50/50 疊在一起
-    // 是一張雙重曝光(實測截圖確認),讀起來像 bug 不像轉場。所以 .camera 先在 0.62–0.72
-    // 收乾,門再從 0.68 起浮上來 —— 中間那一小段幾乎全暗,語意剛好是「轉過身的那一瞬間」。
+    // E1 重排的交棒窗口:.camera 在 e 0.62–0.72 淡出,hero 等到門快關上才浮出來
+    // (0.80–1.0)。三段刻意首尾相接而不重疊太多,讀起來就是「轉身 → 門在身後關上 →
+    // 大廳亮起來」。兩層**錯開**而不是等比對溶:車廂內裝與月台側的門是兩個不同的空間,
+    // 50/50 疊在一起是一張雙重曝光(實測截圖確認),讀起來像 bug 不像轉場。
+    // L2a 之後車廂與門是**同一個 canvas**,所以「錯開」從美學選擇變成硬性條件 ——
+    // 門要等 camOpacity 歸零(e = 0.72 = EXIT_HANDOFF)才接手,見下面的 df.fade。
     const camOpacity = 1 - smooth(clamp((e - EXIT_DOOR.start) / 0.10));
+
+    // 出站的門(E1)。progress / mode / active 必須**同一幀一起**送進去:
+    // 拆成 prop 讓 React 追,mode 會晚一幀 —— 而 exit 起點的 exitDoorP 是 0(門全開),
+    // 用 enter 的分鏡去解讀 0 就是「門全關」,交界那一幀會閃一扇滿版關著的門。
+    const ride3d = ride3dRef.current;
+    const exitDoorP = exitDoorProgress(p);
+    // 3D:車廂就在這個 canvas 裡,門必須等車廂收乾才接手(見 EXIT_HANDOFF)。
+    // 降級:canvas 只畫門,車廂在 DOM,兩層可以並存 → 沿用原本的 0.62 起手。
+    const doorExitOn = phase === "exit" && e >= (ride3d ? EXIT_HANDOFF : EXIT_DOOR.start - 0.02);
+    const df = doorFrame.current;
+    df.progress = doorExitOn ? exitDoorP : doorP;
+    df.mode = doorExitOn ? "exit" : "enter";
+    // 3D 模式下 canvas 就是車廂,全程都要在;降級模式只有門的區間需要它
+    df.active = ride3d || p < PHASE.doorEnd + 0.02 || doorExitOn;
+    df.fade = ride3d
+      ? // 門開完不再淡出(交棒消失,這就是 L2a 的全部重點)。出站的門則從交棒點起淡入,
+        // 起點 opacity 0 接上剛歸零的 camOpacity;0.2 的長度讓它在 hero(e 0.80)之前站滿。
+        doorExitOn ? smooth(clamp((exitDoorP - EXIT_HANDOFF_DP) / 0.15)) : 1
+      : // 降級路徑:維持舊分鏡 —— enter 最後 15% 淡出交給 DOM 車廂(「上車後設備通電」),
+        // exit 0.18→0.48 淡入(刻意排在 .camera 收乾之後,兩個空間 50/50 疊起來是雙重曝光)。
+        df.mode === "exit" ? smooth(clamp((exitDoorP - 0.18) / 0.3)) : 1 - clamp((doorP - 0.85) / 0.15);
+    doorApply.current?.(df);
+
     // §4.4:這裡原本有每幀的 filter: blur() —— 全視窗高斯模糊是這頁最貴的一筆,
     // 手機上轉身兩端都在跑。空間感改由 rotateY/translateX/opacity + 出站的門承擔。
     const cam = camera.current;
     if (cam) {
-      cam.style.transform = camTransform;
-      cam.style.opacity = String(camOpacity);
+      // 3D 的出站門接手之後,.camera 這一層只剩下那個 canvas —— 起身/轉身的 transform
+      // 與淡出都已經走完(camOpacity = 0),必須歸位,不然門會跟著轉了 85° 的座標系跑。
+      const handedOver = ride3d && doorExitOn;
+      cam.style.transform = handedOver ? "none" : camTransform;
+      cam.style.opacity = handedOver ? "1" : String(camOpacity);
       // camOpacity 歸零之後這層已經看不見了,willChange 再留著只是白白佔一個
       // 合成層(§4.4 的 will-change 收斂)
-      cam.style.willChange = camOpacity > 0 ? "transform, opacity" : "auto";
+      cam.style.willChange = !handedOver && camOpacity > 0 ? "transform, opacity" : "auto";
+      // .camera 一歸位,底下的 DOM 疊層(跑馬燈 + 玻璃)也會跟著「復活」——
+      // 但那時人已經下車了,跑馬燈不該再出現在月台上的門裡。sway 那層自己收掉。
+      // (資訊卡/路線圖在 exit 早就 visible=false / 卸載了,只剩這一層要處理。)
+      if (sway.current) sway.current.style.opacity = handedOver ? "0" : "1";
     }
 
-    // 出站的門(E1)。progress / mode / active 三個值必須**同一幀一起**送進去:
-    // 拆成 prop 讓 React 追,mode 會晚一幀 —— 而 exit 起點的 exitDoorP 是 0(門全開),
-    // 用 enter 的分鏡去解讀 0 就是「門全關」,交界那一幀會閃一扇滿版關著的門。
-    const exitDoorP = exitDoorProgress(p);
-    const doorExitOn = phase === "exit" && e >= EXIT_DOOR.start - 0.02;
-    doorApply.current?.(
-      doorExitOn ? exitDoorP : doorP,
-      doorExitOn ? "exit" : "enter",
-      p < PHASE.doorEnd + 0.02 || doorExitOn,
-    );
+    // L2a:疊在 canvas 車廂上的 DOM 層(跑馬燈 + 玻璃反光)。0.85 是推軌停下的那一點
+    // (dolly 在 doorP 0.85 收斂到 1),從這裡開始場景是靜止的、cover 幾何與 DOM 完全一致,
+    // 所以這段淡入純粹是「設備通電」,不是在對位 —— 舊版整片 canvas 交棒的語意留下來了,
+    // 但要對齊的東西從「一整張車廂」縮到「一行字」。
+    if (frame3d.current) frame3d.current.style.opacity = String(smooth(clamp((doorP - 0.85) / 0.15)));
 
     // concourse hero 隨門閉合淡入
     if (intro.current) intro.current.style.opacity = String(smooth(clamp((e - 0.80) / 0.20)));
@@ -207,7 +272,7 @@ export function ScrollJourney() {
   // (bus 的訂閱者自己在 useFrame 裡就會立即套用,這裡補的是 ScrollJourney 自己持有的 ref。)
   useIsoLayoutEffect(() => {
     applyFrame(pRef.current);
-  }, [d, narrow, applyFrame]);
+  }, [d, narrow, gl, applyFrame]);
 
   useEffect(() => {
     if (!wrap.current || !stage.current) return;
@@ -280,10 +345,18 @@ export function ScrollJourney() {
     //     x 20% / 79%,早就被裁到畫面外),把它甩得太厲害只會像畫面在抖。
     const FRONT_K_NARROW = 1.25, FRONT_K_WIDE = 1.7;
     let frontK = FRONT_K_WIDE;
+    // ── 視差振幅隨視窗寬度縮小(L2a)────────────────────────────────────────────
+    // 過掃描的餘裕是**百分比**(canvas 外殼 inset -2.5%、DOM 那層 scale 1.035),
+    // 而位移是**固定 px** —— 視窗越窄餘裕越小:390 寬只有 9.75px,而滿幅位移要 17px
+    // (滑鼠 15 + A1 底噪 2),實測滑鼠推到角落整條左緣會露出舞台底色(817 列)。
+    // 而且同一段 px 位移在小螢幕上讀起來幅度大得多(L1 的立柱係數已經是這個理由)。
+    // 1400px 以上滿幅,以下線性縮小:390 → 0.279(位移 4.2px + 底噪,餘裕 9.75px)。
+    let amp = 1;
     const onResize = () => {
       const a = window.innerWidth / window.innerHeight;
       // 0.62(≈ 直式手機)→ 1.30(已經是橫式)之間插值,不寫死斷點:平板轉向不該跳一下
       frontK = FRONT_K_NARROW + (FRONT_K_WIDE - FRONT_K_NARROW) * clamp((a - 0.62) / (1.3 - 0.62));
+      amp = Math.min(1, window.innerWidth / 1400);
     };
     onResize();
     window.addEventListener("resize", onResize);
@@ -312,12 +385,17 @@ export function ScrollJourney() {
       const nx = ((Math.sin(t * 1.3) + 0.5 * Math.sin(t * 3.7)) / 1.5) * 2.0 * amp;
       const ny = ((Math.sin(t * 1.7) + 0.6 * Math.sin(t * 2.9)) / 1.6) * 1.5 * amp;
       const nr = Math.sin(t * 1.1) * 0.08 * amp;
-      const tx = -cur.x * 15 + nx, ty = -cur.y * 12 + ny;
+      const tx = (-cur.x * 15 + nx) * amp, ty = (-cur.y * 12 + ny) * amp;
+      const ry = cur.x * 1.4, rx = -cur.y * 1.1;
+      const move = `translate3d(${tx.toFixed(2)}px, ${ty.toFixed(2)}px, 0) rotateX(${rx.toFixed(2)}deg) rotateY(${ry.toFixed(2)}deg) rotate(${nr.toFixed(3)}deg)`;
       const el = sway.current;
-      if (el) {
-        const ry = cur.x * 1.4, rx = -cur.y * 1.1;
-        el.style.transform = `translate3d(${tx.toFixed(2)}px, ${ty.toFixed(2)}px, 0) rotateX(${rx.toFixed(2)}deg) rotateY(${ry.toFixed(2)}deg) rotate(${nr.toFixed(3)}deg) scale(1.035)`;
-      }
+      if (el) el.style.transform = `${move} scale(1.035)`;
+      // L2a 的 canvas 外殼:同樣的位移與旋轉,**但沒有 scale** —— 它自己的盒子就已經
+      // 大了 3.5%(.cabin-canvas 的 inset: -1.75%),場景也是照那個尺寸畫的。
+      // 讓合成器去縮放一張已經畫好的點陣圖會多一次重取樣,小字會軟掉(見 JSX 的註解)。
+      // 兩層的縮放中心都是舞台中心,所以「內容放大 3.5% + 同一組位移」在螢幕上完全重合。
+      const cw = canvasWrap.current;
+      if (cw) cw.style.transform = move;
       // L1:立柱層多走的那一段。除以 1.035 是因為這個 transform 活在已經被 sway 縮放過的
       // 座標系裡 —— 螢幕上真正多走的就是 (K-1)×(tx, ty)。A1 底噪(nx/ny)包在 tx/ty 裡,
       // 所以它自動同係數放大,不必另外處理。
@@ -388,36 +466,48 @@ export function ScrollJourney() {
             {`${t({ zh: "開始乘車", en: "Start ride" })} ►`}
           </button>
         )}
-        {showRide && (
-          <div
-            ref={camera}
-            className="camera"
-            style={{ position: "absolute", inset: 0, transformStyle: "preserve-3d", transformOrigin: "center 82%" }}
-          >
-            {/* 只有車廂進 sway 層:那層常駐 scale(1.035) 過掃描(讓 ±15px 平移不露邊),
-                而 will-change + preserve-3d 會讓整層先光柵化再 GPU 縮放 —— 文字和像素字型
-                會被重新取樣而發糊。照片和 canvas 放大 3.5% 看不出來,文字看得出來。 */}
-            <div
-              ref={sway}
-              style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", placeContent: "center", transformStyle: "preserve-3d", willChange: "transform" }}
-            >
-              <CabinComposite bus={bus} scene={cur.scene} ledText={t(cur.led)} frontRef={front} />
-            </div>
-            <StationPanel station={cur} visible={d.panelVisible} />
-            {d.routeVisible && <RouteMap index={d.index} onJump={jumpTo} />}
+        {/* .camera 從 gate 相位就掛著:車門過場的 canvas 現在住在它底下的 sway 層裡
+            (見下面),而 canvas 一輩子只能有一個、永不卸載(坑 10)。gate 期間這一層
+            是 identity + opacity 1,只有那個 canvas 在裡面,不影響按鈕(z-index 8)。 */}
+        <div
+          ref={camera}
+          className="camera"
+          style={{ position: "absolute", inset: 0, transformStyle: "preserve-3d", transformOrigin: "center 82%" }}
+        >
+          {/* 車門過場 +(WebGL 可用時)整個車廂:three.js 場景。
+              progress 0 = 關門待機(門縫漏光),1 = 相機已經穿過門框停在車廂裡 ——
+              **然後就停在那裡當 ride 的舞台**,不再淡出交棒(L2a)。
+              **永遠掛載**,不需要時只用 CSS 收成 display:none —— 條件式掛載會讓 WebGL
+              context 隨著上下捲反覆建/毀,實測會整片白屏(詳見 Door3D 的註解)。
+              同一個 canvas 也服務出站的門(E1,mode="exit")。**絕不能為了兩段門開
+              兩個 canvas** —— 那就是兩個 WebGL context,坑 10 的另一種寫法。
+              每幀的值不是 prop:它們是同一幀的一包,由 applyFrame 一起送進 apply()。
+
+              為什麼**不**放進 sway 層而是自己一個外殼:sway 那層常駐 scale(1.035),
+              而 canvas 是已經光柵化的點陣圖 —— 合成器縮放它就是多一次重取樣,實測小字
+              梯度能量掉 12.6%(坑 13 拒絕過的量級)。所以這個外殼自己大 3.5%
+              (.cabin-canvas 的 inset: -1.75%),場景直接畫在那個尺寸上,sway 迴圈只寫
+              位移與旋轉(沒有 scale)。兩層的中心與縮放因此完全一致,DOM 疊層對得上。 */}
+          <div ref={canvasWrap} className="cabin-canvas">
+            <Door3D register={doorApply} onStatus={onGlStatus} />
           </div>
-        )}
-        {/* 車門過場:three.js 的 3D 場景蓋在整個舞台上(含 gate 按鈕之下、車廂之上)。
-            progress 0 = 關門待機(門縫漏光),1 = 相機已經穿過門框停在車廂前;最後 15%
-            canvas 自己淡出,DOM 車廂(活窗景 + 跑馬燈)透出來接手。
-            **永遠掛載**,離開門區間只用 CSS 收成 display:none —— 條件式掛載會讓 WebGL
-            context 隨著上下捲反覆建/毀,實測會整片白屏(詳見 Door3D 的註解)。
-            同一個 canvas 也服務出站的門(E1,mode="exit"):進站是門開 + 推軌穿門,
-            出站是站在月台上看門關起來。**絕不能為了兩段門開兩個 canvas** —— 那就是
-            兩個 WebGL context,坑 10 的另一種寫法。
-            progress / mode / active 不再是 prop:它們是同一幀的三個值,由 applyFrame
-            一起送進 register 進來的 apply()(理由見 applyFrame 裡的註解)。 */}
-        <Door3D register={doorApply} />
+          {/* 只有 DOM 車廂/疊層進 sway 層:那層常駐 scale(1.035) 過掃描(讓 ±15px 平移
+              不露邊),而 will-change + preserve-3d 會讓整層先光柵化再 GPU 縮放 ——
+              文字和像素字型會被重新取樣而發糊,照片放大 3.5% 看不出來(坑 3)。 */}
+          <div
+            ref={sway}
+            style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", placeContent: "center", transformStyle: "preserve-3d", willChange: "transform" }}
+          >
+            {showRide && (gl === "ok"
+              // WebGL 可用:車廂在場景裡,DOM 只剩「永遠不進 WebGL」的東西 ——
+              // 跑馬燈(文字)與玻璃反光(A6 要跟著滑鼠,留在 CSS 才不用重畫)。
+              ? <CabinFrame rootRef={frame3d} ledText={t(cur.led)} />
+              // 降級路徑(Q3a 降規格凍結):精簡 DOM 車廂。無隧道、無月台層、無窗景深度層。
+              : <CabinComposite bus={bus} scene={cur.scene} ledText={t(cur.led)} frontRef={front} />)}
+          </div>
+          {showRide && <StationPanel station={cur} visible={d.panelVisible} />}
+          {showRide && d.routeVisible && <RouteMap index={d.index} onJump={jumpTo} />}
+        </div>
         {d.phase === "exit" && (
           <div ref={intro} className="concourse-intro" style={{ pointerEvents: "none" }}>
             <div className="concourse-intro-inner"><ConcourseHero /></div>

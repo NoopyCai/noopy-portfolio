@@ -28,7 +28,8 @@ import {
   TextureLoader,
   WebGLRenderer,
 } from "three";
-import { LED_RECT } from "@/lib/progress";
+import type { Frame } from "@/lib/frame";
+import { createCabin } from "./cabin";
 import {
   getFloorCanvas,
   getPanelCanvas,
@@ -56,10 +57,22 @@ const CAM_Z1 = -1.2;               // 末幀機位:已經穿過門面(z=0)進到
 const CABIN_Z = -8;                // 車廂背板的世界座標(實際大小每幀重算,見下方 cover)
 const PITCH0 = -4.5 * (Math.PI / 180); // 起始俯角:低頭看月台的光。dolly 到一半就回正
 
-// cabin.jpg 的原始比例。DOM 車廂用 width:max(100vw,177.68vh) 做 cover,
-// sway 層再常駐 scale(1.035) —— 末幀要像素級對位就得把這兩件事一起複製過來。
+// cabin.jpg 的原始比例。車廂用 width:max(100vw,177.68vh) 做 cover,再常駐一層
+// scale(1.035) 的過掃描(sway,讓 ±15px 的滑鼠視差不露邊)。
+//
+// L2a 之後這裡有**兩個不同的過掃描**,不要混在一起:
+//   · SWAY = 1.035:DOM sway 層的 scale,也就是車廂在螢幕上該有的大小 —— cover 的 ph
+//     乘的是這個(乘完就等於 DOM 車廂的 max(100vw, 177.68vh) × 1.035)。
+//   · CANVAS_OVER = 1.055:canvas **元素自己**比舞台大的比例(globals.css 的
+//     .cabin-canvas 用 inset: -2.75%)。過掃描留在元素上而不是讓 sway 的 scale 去縮放
+//     canvas —— 縮放一張已經光柵化的點陣圖 = 多一次重取樣,實測小字梯度能量掉 12.6%
+//     (坑 13 / 坑 14)。相機 zoom 補 1/CANVAS_OVER,所以門過場在螢幕上的大小不變,
+//     多出來的 5.5% 落在舞台的 overflow: hidden 外面,只是給滑鼠視差的位移用的餘裕。
+//   兩個數字各自有對應處要同步:SWAY ↔ sway 迴圈的 scale(1.035);
+//   CANVAS_OVER ↔ .cabin-canvas 的 inset(-2.75% × 2 = 5.5%)。
 const CABIN_ASPECT = 1672 / 941;
 const SWAY = 1.035;
+const CANVAS_OVER = 1.055;
 
 const HALF_FOV = (FOV * Math.PI) / 360;
 
@@ -81,12 +94,14 @@ export type DoorMode = "enter" | "exit";
 export type DoorScene = {
   /**
    * 畫一幀。
-   * enter:doorP = 0(全閉)→ 1(全開,已經站在車廂裡)
+   * enter:doorP = 0(全閉)→ 1(全開,已經站在車廂裡;之後相機定住,場景就是 ride 舞台)
    * exit :doorP = 0(全開,剛下車)→ 1(全閉,簾幕落下)
+   * frame:車廂那一層的連續量(窗景 pan、燈光曲線、月台、隧道)。門相位也要餵 ——
+   *        門一開就看得到車廂裡面,窗景不是黑的。
    */
-  render(doorP: number, mode?: DoorMode): void;
+  render(doorP: number, mode: DoorMode, frame: Frame): void;
   /** 除錯用:回報三角形數與 context 狀態 */
-  stats(): { triangles: number; calls: number; contextLost: boolean; camZ: number };
+  stats(): { triangles: number; calls: number; contextLost: boolean; camZ: number; geometries: number; textures: number; frames: number };
 };
 
 /**
@@ -108,6 +123,9 @@ export function createDoorScene(canvas: HTMLCanvasElement, onReady: () => void):
 
   const camera = new PerspectiveCamera(FOV, 1, 0.05, 60);
   camera.position.set(0, 0, CAM_Z0);
+  // canvas 元素比舞台大 5.5%(過掃描留在元素上,見上面的註解);zoom 把視野等比放大回來,
+  // 門過場在螢幕上的大小因此與 L1 版一模一樣(實測 profile 互相關 scale 0.9995–1.0000)。
+  camera.zoom = 1 / CANVAS_OVER;
   // near 0.05:相機會直接穿過門面,門框從兩側掠過時不能被近平面切掉
 
   // ── 貼圖 ───────────────────────────────────────────────────────────────────
@@ -351,76 +369,15 @@ export function createDoorScene(canvas: HTMLCanvasElement, onReady: () => void):
     faceMatR.needsUpdate = true;
   });
 
-  // ── 車廂背板 ───────────────────────────────────────────────────────────────
-  // 尺寸不是固定的:每幀依當時的相機距離重算成「剛好 cover 視錐」的大小(見 render)。
-  // 這樣任何視窗比例下、任何一幀,門後看到的都一定是滿版的車廂,不會露出背板外的黑邊;
-  // 而末幀的 cover 幾何就等於 DOM 車廂的 max(100vw,177.68vh) × 1.035。
-  const cabinMat = new MeshBasicMaterial({
-    color: 0x0a0d0f, // 貼圖載好前先用暗色:預設白色會在門縫裡閃一下白
-    fog: false,      // 背板絕不能吃霧 —— 吃了顏色就和 DOM 車廂對不上,交棒會看到色差
-  });
-  const cabin = new Mesh(new PlaneGeometry(1, 1), cabinMat);
-  cabin.position.z = CABIN_Z;
-  scene.add(cabin);
-
-  // cabin.jpg 的照片裡烤死了一組跑馬燈文字(「下一站:松山 … 終點站:基隆」)。過場期間
-  // 背板就是這張原圖,那行字會和 DOM 即時跑馬燈報的站名互相矛盾。所以先畫到 offscreen
-  // canvas、把顯示器內部塗成 DOM 跑馬燈的底色再上傳:
-  //   · 座標吃 lib/progress 的 LED_RECT —— 那是 DOM 端在用的同一組實測百分比,唯一來源
-  //   · 顏色吃 .led 的 #050805 —— 交棒瞬間這塊區域兩邊同色,跑馬燈亮起就純粹是「設備通電」
-  // enter / exit 共用這一張背板,所以改這裡兩個模式都好。
+  // ── 車廂(L2a:不再是一張背板,而是一疊有深度的平面)──────────────────────────
+  // 牆(窗區挖成真的洞)+ 立柱 + 窗景遠近層 + 月台層 + 隧道層,全部在 cabin.ts。
+  // 尺寸不是固定的:每幀依當時的相機距離重算成「剛好 cover 視錐」的大小(見 render 與
+  // cabin.ts 檔頭)。這樣任何視窗比例下、任何一幀,門後看到的都一定是滿版的車廂。
   //
-  // L1 之後這張背板還要**先合成立柱層**:DOM 車廂從這一版起多了 cabin-front.png,
-  // 背板若還是無立柱的原圖,交棒那 15% 的 crossfade 會變成「兩根柱子憑空淡入」——
-  // 物體不會無中生有,那一下比沒有立柱更假。合成的比例是 1.06 ÷ 1.035 = 1.0241546,
-  // 也就是 .cabin-front 相對於 sway 的那一層放大;背板本身已經帶著 sway 的 1.035
-  // (見下面的 cover 計算),兩者相乘剛好等於 DOM 前景在螢幕上的 1.06。
-  // 交棒瞬間滑鼠視差與 A1 底噪都已經收斂到 0(doorP < 1 時 sway 迴圈的 active 是 false),
-  // 所以「靜止時對位」就是這個純縮放對得上 —— 動態位移不必也不能在背板裡模擬。
-  const LED_BLANK = "#050805";
-  const FRONT_REL_SCALE = 1.06 / 1.035;
-  let cabinImg: (CanvasImageSource & { width: number; height: number }) | null = null;
-  let frontImg: HTMLImageElement | null = null;
-  const buildBackdrop = () => {
-    if (!cabinImg) return;
-    const c = document.createElement("canvas");
-    c.width = cabinImg.width;
-    c.height = cabinImg.height;
-    const g = c.getContext("2d")!;
-    g.drawImage(cabinImg, 0, 0);
-    // LED 塗黑排在立柱**之前**:橫杆上緣與 LED 底緣相交約 0.9%(靜止時螢幕上 ~8px),
-    // 而 DOM 那邊是橫杆蓋住 LED 面板(CabinComposite 的節點順序 —— 橫杆比牆面顯示器
-    // 更靠近觀者)。兩邊順序必須一致,不然交棒的 crossfade 會在那一條 8px 的縫裡
-    // 「橫杆上緣憑空淡入」,正是立柱本身要避免的那個瑕疵。
-    g.fillStyle = LED_BLANK;
-    g.fillRect(
-      Math.round((LED_RECT.left / 100) * c.width),
-      Math.round((LED_RECT.top / 100) * c.height),
-      Math.round((LED_RECT.w / 100) * c.width),
-      Math.round((LED_RECT.h / 100) * c.height),
-    );
-    if (frontImg) {
-      const w = c.width * FRONT_REL_SCALE, h = c.height * FRONT_REL_SCALE;
-      g.drawImage(frontImg, (c.width - w) / 2, (c.height - h) / 2, w, h);
-    }
-    const blanked = new CanvasTexture(c); // 預設 filter 與 TextureLoader 給的一致,不用另設
-    blanked.colorSpace = SRGBColorSpace;
-    const prev = cabinMat.map;
-    cabinMat.map = blanked;
-    cabinMat.color.set(0xffffff);
-    cabinMat.needsUpdate = true;
-    prev?.dispose(); // 立柱晚到時會重建一次:舊的那張要還給 GPU(dispose 貼圖沒有坑 10 的問題,那說的是 context)
-    onReady();
-  };
-  loader.load("/cabin.jpg", (tex) => {
-    cabinImg = tex.image as CanvasImageSource & { width: number; height: number };
-    buildBackdrop();
-  });
-  // 立柱層走原生 Image 而不是 TextureLoader:它只是拿來畫進 canvas 的素材,不需要
-  // 變成 GPU 貼圖。載不到就維持無立柱的背板 —— 和 DOM 端 front 載入失敗是同一種降級。
-  const fi = new Image();
-  fi.onload = () => { frontImg = fi; buildBackdrop(); };
-  fi.src = "/cabin/cabin-front.png";
+  // 舊版這裡是「一張烤死的 cabin.jpg 背板 + 最後 15% canvas 淡出交棒給 DOM 車廂」。
+  // 交棒整段消失了 —— 門開完相機就停在車廂裡,同一個場景繼續當 ride 的舞台,
+  // 於是末幀對位這個一直要守的東西不再是風險(它已經沒有對象要對)。
+  const cabin = createCabin(scene, onReady);
 
   // ── 燈光 ───────────────────────────────────────────────────────────────────
   scene.add(new AmbientLight(0x37506b, 1.15)); // 夜的冷調環境光(月台燈的漫射)
@@ -433,11 +390,13 @@ export function createDoorScene(canvas: HTMLCanvasElement, onReady: () => void):
   // ── 每幀 ───────────────────────────────────────────────────────────────────
   let lastP = 0;
   let lastMode: DoorMode = "enter";
+  let lastFrame: Frame | null = null;
   let cw = 0, ch = 0;
 
-  const render = (doorP: number, mode: DoorMode = "enter") => {
+  const render = (doorP: number, mode: DoorMode, frame: Frame) => {
     lastP = doorP;
     lastMode = mode;
+    lastFrame = frame;
     const w = canvas.clientWidth, h = canvas.clientHeight;
     if (!w || !h) return; // display:none 期間 clientWidth = 0,畫了只會把 buffer 縮成 0
     if (w !== cw || h !== ch) {
@@ -503,31 +462,33 @@ export function createDoorScene(canvas: HTMLCanvasElement, onReady: () => void):
     // (實測 0.55 是兩條純 #ff9a3c 的橘柱,把整個推軌鏡頭壓成橘色)。所以壓到 0.16。
     jambMat.emissiveIntensity = 0.16 * open * jambFade;
 
-    // 車廂背板:每幀重算成 cover 尺寸。
-    //   視錐在背板距離上的高度 = 2·dist·tan(fov/2);要 cover 就得再乘上
-    //   max(1, aspect/CABIN_ASPECT)(寬螢幕改由寬度決定),最後乘 sway 的 1.035。
-    //   zoom 讓早期的背板稍微放大一點(車廂由深處「落定」),收斂到 1 時就是 DOM 的幾何。
-    //   出站模式 zoom 恆 1,背板只是「門縫裡看得到車廂內裝」的那一塊。
+    // 車廂:每幀重算成 cover 尺寸(牆那一層,其餘各層在 cabin.ts 依距離比例跟著算)。
+    //   視錐在牆面距離上的高度 = 2·dist·tan(fov/2);要 cover 就得再乘上
+    //   max(1, aspect/CABIN_ASPECT)(寬螢幕改由寬度決定),最後乘 **SWAY**(不是
+    //   CANVAS_OVER):相機 zoom 已經把元素比舞台大的那 5.5% 抵消掉,所以「螢幕上多大」
+    //   只由 ph/frustumH 決定 —— 乘 1.035 算出來就是 DOM 車廂的 cover × sway。
+    //   zoom 讓早期的車廂稍微放大一點(由深處「落定」),收斂到 1 就是 DOM/cover 的幾何。
+    //   出站模式 zoom 恆 1,車廂只是「門縫裡看得到內裝」的那一塊。
     const dist = camera.position.z - CABIN_Z;
     const pitch = Math.abs(camera.rotation.x);
-    // 俯角期間視錐是斜的,用 tan(fov/2 + |pitch|) 取一個略大的保守值,免得背板上緣露空
+    // 俯角期間視錐是斜的,用 tan(fov/2 + |pitch|) 取一個略大的保守值,免得上緣露空
     const frustumH = 2 * dist * Math.tan(HALF_FOV + pitch);
     const ph = frustumH * Math.max(1, camera.aspect / CABIN_ASPECT) * SWAY * zoom;
-    cabin.scale.set(ph * CABIN_ASPECT, ph, 1);
-    // 背板跟著視線中心:俯角歸零、相機在 y=0 時回到 y=0(= enter 末幀的對位條件)
-    cabin.position.y = camera.position.y + dist * Math.tan(camera.rotation.x);
+    // 車廂跟著視線中心:俯角歸零、相機在 y=0 時回到 y=0(= enter 末幀的對位條件)
+    const cy = camera.position.y + dist * Math.tan(camera.rotation.x);
+    cabin.update({ camY: camera.position.y, dist, ph, cy, frame, visible: true });
 
     renderer.render(scene, camera);
   };
 
   // 尺寸變化才重畫一幀(沒有常駐 rAF,resize 時沒人會幫我們補畫)
-  const ro = new ResizeObserver(() => render(lastP, lastMode));
+  const ro = new ResizeObserver(() => lastFrame && render(lastP, lastMode, lastFrame));
   ro.observe(canvas);
 
   // context 真的被 GPU 收走時(顯卡驅動重啟、分頁長期背景化)的保險。
   // preventDefault 才會讓瀏覽器嘗試補發 restored;three 的資源在 restore 後會自動重上傳。
   canvas.addEventListener("webglcontextlost", (e) => e.preventDefault());
-  canvas.addEventListener("webglcontextrestored", () => render(lastP, lastMode));
+  canvas.addEventListener("webglcontextrestored", () => lastFrame && render(lastP, lastMode, lastFrame));
   // 這裡刻意沒有 dispose():元件一輩子只掛載一次(見 CLAUDE.md 坑 10),
   // 真的走到卸載就是離開頁面,context 交給瀏覽器回收就好。
 
@@ -538,6 +499,12 @@ export function createDoorScene(canvas: HTMLCanvasElement, onReady: () => void):
       calls: renderer.info.render.calls,
       contextLost: renderer.getContext().isContextLost(),
       camZ: camera.position.z,
+      // L2a 的效能預算(spec:<30 calls / <500 tri):車廂那疊平面全程都在,
+      // 這兩個數字是驗收要看的。geometries/textures 用來抓「窗景長條有沒有重複上傳」。
+      geometries: renderer.info.memory.geometries,
+      textures: renderer.info.memory.textures,
+      // 「idle 零 GPU」的證據:閒置時這個數字不能動(render-on-demand 是憲法)
+      frames: renderer.info.render.frame,
     }),
   };
 }

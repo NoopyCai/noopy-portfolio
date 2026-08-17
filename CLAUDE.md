@@ -34,12 +34,15 @@ app/page.tsx            相位分派:reduced-motion → StaticFallback,否則 Sc
                         Concourse 一律渲染(不要放進 reduced-motion 的 else 分支)
 components/
   ScrollJourney.tsx     ★ 核心。ScrollTrigger pin、相位、相機動畫、滑鼠視差、跳站
-  Door3D.tsx            車門開啟過場的 React 殼(canvas + dynamic import three + 餵 progress)
-  door3d/scene.ts       ★ 過場的 three.js 場景(純函式,非 React;一個 render(doorP) 畫一幀)
+  Door3D.tsx            three 場景的 React 殼(canvas + dynamic import three + 餵每幀的一包值)
+  door3d/scene.ts       ★ 門的 three.js 場景(純函式,非 React;一個 render(doorP, mode, frame) 畫一幀)
+  door3d/cabin.ts       ★ **車廂本體的場景層**(L2a):牆(窗區挖洞)+ 立柱 + 窗景遠近層 +
+                        月台層 + 隧道;grade / soft-light tint 是自寫 shader(見下方「統一場景」)
   door3d/textures.ts    門板 / 月台警戒條 / 光楔 / 門縫光的程序貼圖(canvas,無外部圖檔)
-  CabinComposite.tsx    車廂照(back)+ 三扇車窗 + LED + grade + 立柱前景層(front,.cabin-front,
-                        節點順序最後 —— 橫杆要從跑馬燈前面掠過,見下方「前景立柱層」)
-  Window.tsx            單扇車窗:scene crossfade + 隨捲動水平流動(canvas blit);中央窗拆遠近兩層
+  CabinFrame.tsx        L2a:疊在 canvas 車廂上的 DOM 層 —— **只有跑馬燈與玻璃反光**
+                        (文字永不進 WebGL;A6 反光要跟滑鼠走,留在 CSS 才是零重繪)
+  CabinComposite.tsx    ⚠ **no-WebGL 的降級路徑**:車廂照 + 三扇車窗 + LED + grade + 立柱層
+  Window.tsx            ⚠ 同上(降級路徑):單扇車窗的 crossfade + 水平流動(canvas blit)
   StationPanel.tsx      作品資訊卡(liquid glass)+「看細節」modal
   RouteMap.tsx          右側六站進度點,點擊跳站
   Concourse.tsx         出站大廳(ConcourseHero 由轉場與正式區塊共用,確保交棒無縫)
@@ -52,13 +55,14 @@ lib/
                         定位框與門場景背板「把烤死字塗黑」的矩形共用它)
   scene.ts              ★ 六種窗景的逐像素 canvas 繪製(純函式,無動畫)。`layer: "far" | "near"`
                         把一個場景拆成遠近兩張(A3 深度層);不傳 = 完整版,舊呼叫端不受影響
-  frame.ts              捲動連續量的 ref 通道(階段 0):applyFrame 直寫 → 訂閱者寫 DOM,零 re-render
+  frame.ts              捲動連續量的 ref 通道(階段 0):applyFrame 直寫 → 訂閱者寫 DOM / 場景,零 re-render
+  strips.ts             窗景 3× 長條([bg | full | bg])的建置與 drawScene 快取(坑 8)。
+                        3D 場景(當 CanvasTexture)與降級的 DOM 車廂(blit)共用同一份
 content/stations.ts     六站全部內容(雙語)。改文案只動這裡
 public/
   cabin.jpg             ★ 全站的車廂基底(1672×941,150 KB)。2026-08 換成**無立柱**的新版
-  cabin/cabin-front.png   立柱+橫杆去背層(1672×941 RGBA,63 KB)。3D 化階段 1 已接進 DOM
-                          (CabinComposite 的 front 層,視差係數見下);門場景的背板也會把它
-                          合成上去,不然交棒時立柱會憑空淡入
+  cabin/cabin-front.png   立柱+橫杆去背層(1672×941 RGBA,63 KB)。L2a 之後它是**場景裡
+                          z=-6.5 的一個平面**(door3d/cabin.ts);降級路徑才走 DOM 的 .cabin-front
 ```
 
 ### 相位
@@ -68,8 +72,8 @@ public/
 | 相位 | progress | 畫面 |
 |---|---|---|
 | `gate` | 0 → 0.13 | 「開始乘車 ►」按鈕（0.09 起淡出） |
-| （door） | 0.13 → 0.22 | 車門開啟過場：`Door3D` 的 three.js 場景蓋在最上層，車廂已掛載在門後。**不是獨立 phase**（`phaseOf` 回 `ride`），由 `doorProgress` 驅動 |
-| `ride` | 0.22 → 0.8 | 車廂 + 六站（`rideProgress` 從 doorEnd 起算，門開完剛好停在第一站） |
+| （door） | 0.13 → 0.22 | 車門開啟過場：`Door3D` 的 three.js 場景。**不是獨立 phase**（`phaseOf` 回 `ride`），由 `doorProgress` 驅動。門後看到的車廂就是同一個場景裡的東西（窗景是活的） |
+| `ride` | 0.22 → 0.8 | 車廂 + 六站（`rideProgress` 從 doorEnd 起算，門開完剛好停在第一站）。**canvas 不落幕**：相機停在車廂裡，場景繼續當舞台（L2a） |
 | `exit` | 0.8 → 1 | 第一人稱起身 + 轉身，尾段淡出交棒給 Concourse |
 
 門過場是**真的 3D 場景**（`components/Door3D.tsx` + `components/door3d/`）：three.js、一台 `PerspectiveCamera(50°)`、月台在門外、cabin.jpg 貼在門後 `z = -8` 的背板上。門板/車體/月台地面貼的是 `public/door/*.jpg`（使用者以 `docs/ai-illustration-prompts.md` §D 的 prompt 自行 AI 生成，共 518 KB；`textures.ts` 的程序繪製版是載入失敗時的 runtime fallback，**不可刪**）。材質亮度靠 `EXPOSURE` 常數做曝光補償（`color.setScalar`，材質層級）——燈光與 emissive 不動。**換圖後必須重量三個對位數字**（門縫 x、綠帶 v、導盲磚 v）＋ car-body 的標語橫向相位 `CAR_U0`，量法見 prompts 文件 §D。分鏡全部由 `doorP` 插值，**沒有 delta time、沒有常駐 rAF**，所以倒著捲就是倒著關：
@@ -79,32 +83,56 @@ public/
 | 0 → 0.15 | 關門待機，中線門縫漏出一道細光 | `slitMat.opacity`（additive 光柱貼在門板**前面**，擺後面會被門板切成硬邊白線） |
 | 0.15 → 0.70 | 兩片門板 3D 滑開（塞拉門：先往車體外浮 0.1 再滑），暖光楔灑上月台地面 | `panelL/R.position`、`wedgeMat.opacity`、`warm`（PointLight，擺在門**外** z=0.45，門板正面朝月台） |
 | 0.30 → 0.85 | 相機 dolly-in 穿過門框（`z 4.2 → -1.2`），門柱與門板從兩側掠過＝視差；俯角 -4.5° 在中途回正 | `camera.position.z` / `camera.rotation.x`，`near = 0.05`（不然穿門那幾幀門框會被近平面切掉） |
-| 0.85 → 1.0 | 相機定住，canvas CSS opacity 1→0 溶接給 DOM 車廂 | `Door3D` 的 `fade`；相機必須是靜止的，會動的畫面溶接會抖 |
+| 0.85 → 1.0 | 相機定住。**canvas 不再淡出**（L2a）——場景就是車廂；這 15% 只讓 DOM 的跑馬燈與玻璃反光淡入（`.cabin-frame` 的 opacity），語意仍是「上車後設備通電」 | `ScrollJourney` 寫 `frame3d.style.opacity`；相機從 0.85 起靜止，DOM 疊層的 cover 幾何因此與場景完全一致 |
 
-**末幀對位**是這個場景唯一不能妥協的數字：背板每幀重算成「剛好 cover 視錐」的大小（`2·dist·tan(fov/2)`，寬螢幕改由 `aspect / 1.77683` 決定），再乘上 sway 那層常駐的 `1.035`。末幀（`doorP = 1`，相機 `z = -1.2`、俯角 0、`zoom = 1`）算出來就等於 DOM 車廂的 `max(100vw, 177.68vh)` cover 幾何 × 1.035。實測（與 DOM 的 cabin.jpg 逐列/逐行互相關，取拋物線插值的次像素峰值）**位移 dx / dy 都在 0.1px 以內**：2026-08 ② 二次換基底後重測，1920×958 是 dx +0.045 / dy +0.024、直式 390×844 是 dx +0.016 / dy +0.037，相關係數 0.9989–0.9996；同一輪在 Chrome 實機另量一組(視窗 1470×801 與直式 390×801，dpr 2)是 dx +0.019 / dy +0.084 與 dx +0.011 / dy +0.053，相關 0.9988–0.9997（① 那輪是 +0.02/+0.03 與 +0.001/+0.002，同一量級。量法見 prompts §E）。動到 `FOV` / `CAM_Z1` / `CABIN_Z` / `zoom` 任何一個都會破壞這件事。
+**cover 幾何**：車廂各層每幀重算成「剛好 cover 視錐」的大小（`2·dist·tan(fov/2)`，寬螢幕改由 `aspect / 1.77683` 決定）再乘 `1.035`。那個 1.035 同時出現在三個互相抵消的地方——canvas 元素自己大 3.5%、相機 `zoom = 1/1.035`、cover 乘 1.035——**改一個就要三個一起改**（理由見坑 14 與 `scene.ts` 的 `SWAY` 註解）。任何相機位置下各層在螢幕上都對齊同一格網 = DOM 合成的樣子。
 
-交棒是 **crossfade 不是硬切**：canvas 畫的是 cabin.jpg 原圖（車窗全黑、LED 是照片裡烤死的字），底下的 DOM 車廂有即時窗景與跑馬燈，最後 15% 讓它從底下漸亮，語意是「上車後設備通電」。門的區間外 canvas 只掛 `.door-canvas-idle`（`display:none`），**元件本身永不卸載**——原因見坑 10。
+**L2a 之前**這裡有一段「末幀對位」的紅線：doorP 0.85–1.0 讓 canvas 淡出、交棒給 DOM 車廂，兩邊必須像素級重合（歷次實測 dx/dy 都在 0.1px 內）。**那個交棒已經不存在了**——門開完場景就是車廂。實測 doorP 0.99 → 1.00 → 1.01 三幀(把資訊卡/路線圖/DOM 疊層都收掉後)**逐像素完全相同**(diffPx = 0)。`FOV` / `CAM_Z1` / `CABIN_Z` / `zoom` 因此解鎖，但**進站分鏡本身仍然是紅線**(改了就是改構圖)。
+
+門的區間外 canvas 只掛 `.door-canvas-idle`（`display:none`）——只有降級路徑會走到，3D 模式全程都要它。**元件本身永不卸載**，原因見坑 10。
 
 效能與載入：
 
-- three 只透過 `Door3D` 裡的 **`import("./door3d/scene")`** 進來，是獨立的 async chunk（實測首頁 First Load JS 162 kB，裡面**沒有** three；three 那兩塊 chunk 合計 ~135 kB gzip，只有進門相位前才下載）。預載排在 `requestIdleCallback`（timeout 1200ms），另外在 `doorP > 0` 而場景還沒好時補叫一次 boot——使用者可能比 idle callback 快。
-- 拿不到 WebGL、或 chunk 載不下來（離線）：`createDoorScene` 回 `null` / `import` 的 `.catch()`，canvas 保持透明，過場退化成直接看到門後的車廂。**不要給 `.door-canvas` 任何 CSS 底色**，那會讓退化路徑變成一塊蓋住車廂的色塊。
-- render-on-demand：只有 `progress` / `active` 變或 `ResizeObserver` 觸發才畫一幀。`setPixelRatio(min(dpr, 2))`、沒有 shadow map、整個場景 **76 個三角形 / 23 draw calls**（末幀只剩 10 / 4，其餘被相機切掉）。`display:none` 期間 `clientWidth = 0`，`render` 直接 return（畫了只會把 buffer 縮成 0）。
-- dev 下 `window.__door3d.stats()` 可以讀三角形數、draw calls、`isContextLost()`、相機 z（production 不掛）。
+- three 只透過 `Door3D` 裡的 **`import("./door3d/scene")`** 進來，是獨立的 async chunk（實測首頁 First Load JS 166 kB，與 L1 版同數字，裡面**沒有** three；three 那兩塊 chunk 只有進門相位前才下載）。預載排在 `requestIdleCallback`（timeout 1200ms），另外在 `doorP > 0` 而場景還沒好時補叫一次 boot——使用者可能比 idle callback 快。
+- 拿不到 WebGL、或 chunk 載不下來（離線）：`createDoorScene` 回 `null` / `import` 的 `.catch()` → `onStatus(false)` → **掛精簡 DOM 車廂**（見下方「降級路徑」）。**不要給 `.door-canvas` 任何 CSS 底色**，那會讓退化路徑變成一塊蓋住車廂的色塊。
+- render-on-demand：只有 `applyFrame`（捲動）／貼圖到貨／`ResizeObserver` 才畫一幀。`setPixelRatio(min(dpr, 2))`、沒有 shadow map。實測 ride 全程 **9–16 draw calls / 18–32 三角形**（預算 <30 / <500），閒置時 `stats().frames` 完全不動 = GPU 零工作。`display:none` 期間 `clientWidth = 0`，`render` 直接 return。
+- dev 下 `window.__door3d.stats()` 可以讀三角形數、draw calls、`isContextLost()`、相機 z、貼圖數、以及 `frames`（idle 零 GPU 的證據）（production 不掛）。
 
-### 前景立柱層(L1 拆層視差)
+### 統一場景(L2a:門場景吞下 ride)
 
-車廂不再是一張圖：`cabin.jpg`（無立柱的 back）+ `cabin/cabin-front.png`（立柱 ×2 + 頂端橫杆的 alpha 層，1672×941、63 KB，與基底同一格網）。兩張同一組 cover 幾何，front 是 `CabinComposite` 的**最後一個節點**——tint／隧道／窗／LED 全部畫在它底下。
+門開完 canvas 不落幕,相機停在車廂裡,**同一個 three 場景繼續當 ride 的舞台**(`door3d/cabin.ts`)。
+DOM 只剩「永遠不進 WebGL」的東西。z 由遠到近:
 
-**為什麼是最後：**橫杆（圖上 y 10.5–12.6%，再被 front 自己的 1.024 過掃描往上推）與 LED 顯示區（`LED_RECT` 到 y 10.4%）在螢幕上本來就擦邊，而視差讓 front 垂直多走到 ±23px。舊層序（LED 最後畫）在滑鼠推到右下角時，實測橫杆上緣被 LED 面板吃掉 **17px**——那 17px 讀到的是 `#050805` 的面板底色，而橫杆物理上比牆面顯示器更靠近觀者，深度是反的。改成 front 最後畫之後，同一個取樣帶的亮度 7.1 → 229（靜止）／153（最大視差）＝橫杆確實在跑馬燈前面；跑馬燈的字是垂直居中的，被遮的只有面板下緣的空白帶。
+| z | 這一層 | 素材 | 動態 |
+|---|---|---|---|
+| -14 / -11 | 窗景遠 / 近層 ×3 扇窗 | `lib/strips.ts` 的 3× 長條當 `CanvasTexture`(`NearestFilter`) | pan = `texture.offset.x`(GPU 零成本);兩層倍率 0.35 / 1.0 = A3 差速 |
+| -9.5 | 月台層 ×3 | 同上,`platform` 場景 | opacity = `frame.platform`(B2 邏輯原樣) |
+| -9 | 隧道壓暗 + 洞口暗帶 ×3 | shader(無貼圖) | `frame.tunnel.dim` / `.band` |
+| -8 | 車廂牆(**三個窗區挖成真的洞**) | `cabin.jpg` 程序處理:LED 塗黑 → `WIN` 的圓角矩形 `destination-out` | grade shader |
+| -7.5 | 出洞回光 | 純色平面 | `frame.tunnel.flash` |
+| -6.5 | 立柱 + 橫杆 | `cabin/cabin-front.png` | 同一個 grade shader,`uLead > 0`(隧道掃光近層先亮) |
 
-- **視差係數 K = 1.7**（直式降到 1.25，依 aspect 插值），寫在 `ScrollJourney` 的 sway 迴圈裡：front 的螢幕位移 = K × sway 的位移（A1 底噪自動同係數放大）。
-- **front 自帶 `scale`**：sway 的 1.035 過掃描蓋不住多走的位移（1440×900 垂直餘裕 15.75px < 需求 22.95px，差 7.2px），所以 front 在螢幕上是 **1.06**＝1.035 × `1.0241546`。**`1.0241546` 有三處必須同步**：`ScrollJourney` 的 `FRONT_SCALE_REL`、`globals.css` 的 `.cabin-front`（第一幀預設值）、`door3d/scene.ts` 的 `FRONT_REL_SCALE`（背板合成）。
-- **front 自帶 tint，而且必須用同一張 PNG 當遮罩**：前景排到 LED 之後就吃不到底圖那片 `inset: 0` 的 tint 色片了，所以 `.cabin-front` 是個**容器**，裡面是 img（`grade.filter` 寫在 img 上，不是容器上，見坑 13 的同一個理由）+ 一層 `.cabin-front-tint`（同色同 `GRADE_BLEND`）。**遮罩不是為了省算力而是正確性**：soft-light 混的是「底下已經畫好的東西」，alpha = 0 的地方 backdrop 是透明的 → 沒有遮罩就會直接塗上 tint 原色，變成蓋住整個畫面、疊在底圖 tint 之上的雙重色紗。少了這一層的代價實測過：立柱色相會定住（river 站 R 偏 **+10/255**、city 站 **−9**，ΔE ≈ 6，1× 下讀得出來是「另一種金屬」，而且與車廂壁的暖冷關係在曲線兩端**反向**）；補上之後六站立柱的 RGB 與舊層序差 **≤ 0.4/255**。隧道的 lift/sweep 仍然掃不到立柱（差 ≤ 1.7/255，L2 才有真深度掃光）。
-- **門場景的背板要先合成立柱**：背板是 cabin.jpg 原圖，DOM 車廂卻有立柱 → 交棒 crossfade 會變成「柱子憑空淡入」。所以背板貼圖在上傳前用同樣的 1.0241546 把 front 疊上去（順序：cabin → **LED 塗黑 → front**，和 DOM 的節點順序一致——順序反了，交棒就會在橫杆／LED 那條 8px 的縫裡閃一下）。交棒瞬間滑鼠視差與底噪都收斂到 0，所以純縮放就對得上：實測背板與 DOM 立柱的欄剖面互相關 **lag −0.40 / −0.50 px**（1440×900 兩根柱），橫杆的列剖面 **+0.06 px**（直式 +0.03 px；層序修正前是 −0.38/−0.47 與 +0.08/+0.05，同一量級，橫杆的 corr 從 0.982 升到 0.988）。
-- **末幀對位重驗**（參考圖同樣合成 front + 塗黑 LED —— 少了 LED 那一步，橫杆上緣被面板蓋住的那一條帶子會讓 corrY 掉到 0.96）：1920×958 `dx +0.042 / dy +0.024`（corr 0.9992 / 0.9996）、1440×900 `dx +0.029 / dy +0.054`、390×844 `dx +0.017 / dy +0.028` —— 與換基底那輪（+0.045/+0.024）同一量級。
-- **fallback**：front 載入失敗 → `onError` 把**整個容器**收成 `display: none`（連 tint 那層一起——遮罩用的是同一張圖，圖沒了遮罩也沒了，只留 tint 就是一片色紗），畫面就是無立柱的 back，其餘完全不受影響（門場景那邊也一樣，背板退回原圖）。
-- **中央窗的遠近層（A3）**：`drawScene` 的 `layer` 參數把場景拆成 `far`（天空／星／雲／遠山／中景剪影）與 `near`（近景建物／地面／前景物件／**全部地標**），中央窗把兩層畫進同一張 canvas、平移倍率 0.35 / 1.0（左右窗維持單層，那道 7% 寬的窄縫讀不出差速）。月台站不拆（站內場景，而且站名燈牌是地標）。地標一律留在 near 的理由見坑 8。
+- **窗洞是牆自己的 alpha**:壓暗 / 月台 / 窗景全部擺在牆**後面**,洞就是它們的 `overflow: hidden`,圓角自然由牆切。這也是為什麼暗帶掃到窗外不會漏到別扇窗。
+- **各層都重算成 cover**(見上方「cover 幾何」):照片不是模型,它必須永遠填滿畫面(坑 4)。代價是 ride 相機靜止時**層與層之間沒有相對視差** —— L1 的立柱滑鼠視差(K = 1.7)在 3D 模式退役,深度改由窗景差速 / 真窗洞 / 隧道掃光的先後承擔。真正的層視差要等階段 2b(相機真的轉身)。
+- **grade 是自寫 shader,不是場景燈光**:六站燈光曲線的定義是 CSS 的 `filter: brightness saturate contrast` + 一層 soft-light 的 tint(DESIGN.md §1),映射成 Ambient/Point 等於重調一次曲線。所以 `cabin.ts` 把那三個 filter 函式與 soft-light 的**規格算式**原樣搬進 fragment shader,貼圖走 `NoColorSpace`(取樣拿到的就是 sRGB 值)、輸出不做色彩空間轉換 —— 算式因此和合成器在做的事逐位對應。實測六站 + 隧道的車廂壁 / 座椅 / 海報 / 天花板取樣點,與 L1 的 DOM 版**差 ≤ 2/255**。
+- **窗景 pan 走 `texture.offset.x`**:長條上傳一次,每幀只改 uv(舊版是每幀兩次 `drawImage` × 3 扇窗)。`repeat/offset` 同時吃 `objectFit: cover` + `objectPosition` 的取樣框(每扇窗的裁切框是常數,因為窗框的螢幕比例 = `(w/h) × CABIN_ASPECT` 與視窗大小無關)。offset 做**整數對齊**,理由同 blit 版(像素風景不能次像素平移)。同一站的長條 `clone()` 給三扇窗共用 source = 只上傳一次。
+- **站切換 crossfade 由 x 驅動**(`XFADE = 0.07`,`ScrollJourney`):A = 離開中的站、B = 進入中的站,`frame.mix` 是 B 疊在 A 上的不透明度。倒著捲就是倒著溶,而且零 re-render(舊版是掛新層 + CSS transition,一次換站 7 次 commit → 現在 5 次)。**代價**:沒有時間軸就沒有「停久了自己收斂」,停在正中間會停在 50/50 的疊影上 —— 所以窗口壓到約 93px 捲動(巡航段最快的一段,兩三格滾輪就過完)。
+- **隧道在 shader 裡**(A5 從 CSS overlay 升級):暖光池(舊 `.tunnel-lift` 的橢圓)與掃光帶(舊 `.tunnel-sweep-band` 的 100° 重複漸層)都算在 grade shader 的末段,牆與立柱**共用同一段程式、不同的 `uLead`** —— 立柱早 0.12 個週期亮起來、多吃 12% 的光池,這就是「掃光沿 z 有先後」。L1 那條「lift/sweep 掃不到立柱(差 ≤ 1.7/255)」的缺陷因此結案(實測立柱在洞中亮 +1.2/255,而車廂壁只 +0.14)。
+- **DOM 疊層 `CabinFrame`**:只有跑馬燈與玻璃反光(A6 要跟滑鼠走 ±3.5px,搬進場景等於每次滑鼠動就要重畫一幀)。**跑馬燈的面板底色不在 DOM**(`.cabin-frame .led { background: transparent }`)——那塊 `#050805` 是牆貼圖裡塗掉烤死字的矩形;DOM 若自己畫一片不透明面板,就會蓋掉場景裡「橫杆壓在跑馬燈前面」的那 8px,深度又反了(L1 的同一個坑)。疊層在 doorP 0.85→1 淡入(相機從 0.85 起靜止,cover 幾何與場景完全一致)。
+- **exit 的交棒**(本階段沿用 CSS 相機):車廂與出站的門是**同一個 canvas**,不能像 DOM 版那樣兩層並存。所以門等 `.camera` 的 opacity 收乾才接手 —— `EXIT_HANDOFF = e 0.72`(= camOpacity 歸零那一點),接手瞬間 `.camera` 的 transform 歸位、`sway` 那層收成 opacity 0(否則跑馬燈會在月台上的門裡復活)。門的淡入因此從 exitDoorP 0.303 起算(舊版 0.18),0.15 內站滿,仍然早於 hero 的 e 0.80。階段 2b 會把整段 exit 收進場景,這個交棒也會消失。
+
+### 降級路徑(no-WebGL,Q3a 降規格凍結)
+
+`createDoorScene` 回 `null`(拿不到 WebGL)或 chunk 載入失敗 → `Door3D` 的 `onStatus(false)` → `ScrollJourney` 掛 `CabinComposite`(**靜默,不顯示任何提示**)。降級版保留內容與識別:車廂 + 立柱層(含 K = 1.7 的視差與 `.cabin-front-tint` 遮罩)+ 三扇單層窗景 + 燈光曲線 + 跑馬燈 + 資訊卡 + 路線圖;**砍掉**隧道(A5)、月台層(B2)、窗景深度層(A3)、門過場(canvas 保持透明 → 直接切換)。兩套 ride 視覺的同步面只剩 cover 幾何常數(`max(100vw, 177.68vh)` 與 `1.0241546`,四處註解互相指向)。
+
+`gl` 有三態:`pending` 期間(場景在 idle callback 才 boot)先掛 DOM 車廂,任何時刻畫面上都有一個車廂;`ok` 之後整組卸載。
+
+L1 的立柱層知識**只剩降級路徑在用**,但數字仍然是唯一來源:
+- **`1.0241546`(front 相對於 sway 的放大,螢幕上 1.035 × 1.0241546 = 1.06)有三處必須同步**:`ScrollJourney` 的 `FRONT_SCALE_REL`、`globals.css` 的 `.cabin-front`、`door3d/cabin.ts` 的 `FRONT_REL`(場景版的立柱平面)。
+- **front 必須是最後一個節點**(連 LED 都畫在它底下):橫杆(圖上 y 10.5–12.6%)與 LED 顯示區(到 y 10.4%)在螢幕上擦邊,而視差讓 front 垂直多走到 ±23px。舊層序實測橫杆上緣被 LED 面板吃掉 **17px** —— 橫杆物理上比牆面顯示器更靠近觀者,深度不能反。
+- **front 自帶 tint,而且必須用同一張 PNG 當遮罩**:排到 LED 之後就吃不到底圖那片 `inset: 0` 的 tint 了。遮罩不是為了省算力而是正確性 —— soft-light 混的是「底下已經畫好的東西」,alpha = 0 的地方 backdrop 是透明的,沒有遮罩就會塗成蓋住整個畫面的雙重色紗(實測少了它立柱色相會定住:river 站 R 偏 +10/255、city 站 −9,ΔE ≈ 6)。
+- **fallback 的 fallback**:front 載入失敗 → `onError` 把**整個容器**收掉(連 tint 那層一起),畫面就是無立柱的 back。
+- **視差係數 K = 1.7**(直式降到 1.25,依 aspect 插值):front 的螢幕位移 = K × sway 的位移。1440×900 沿用 1.035 的話垂直餘裕只有 15.75px 而需求 22.95px,所以 front 才要自帶 1.06 的過掃描。
 
 ## 踩過的坑（改動前務必讀）
 
@@ -122,9 +150,9 @@ public/
 
 7. **Departure Mono 是單一字重，永遠不要 `font-weight: 700`。** synthetic bold 會把 bitmap 邊緣往外糊一格、破壞像素網格。要更重就加大字級或用 `text-shadow` 光暈。
 
-8. **`drawScene` 有 module-scope 的 Map 快取**（`Window.tsx`）。它是逐像素迴圈（單張約 108k 次 `fillRect`），key 是 `scene|bg|layer`：一個戶外站最多 4 張（左右窗的完整版、中央窗的 `far`、`near-bg`、`near-full`），月台 2 張，全程走完六站 = 22 張 ≈ 9 MB。**`far` 層永遠不畫地標**，所以它的 `bg` 與 `full` 是同一張（`getScene` 直接把 bg 釘成 true）——地標的「每站出現一次」靠的是 `[bg | full | bg]` 三段長條加上每站一圈的 pan，而 far 只走 0.35 圈。不要繞過快取直接呼叫。
+8. **`drawScene` 有 module-scope 的 Map 快取**（`lib/strips.ts`，L2a 從 `Window.tsx` 搬出來給 3D 場景與降級路徑共用）。它是逐像素迴圈（單張約 108k 次 `fillRect`），key 是 `scene|bg|layer`：一個戶外站最多 4 張（左右窗的完整版、中央窗的 `far`、`near-bg`、`near-full`），月台 2 張，全程走完六站 = 22 張 ≈ 9 MB。**`far` 層永遠不畫地標**，所以它的 `bg` 與 `full` 是同一張（`getScene` 直接把 bg 釘成 true）——地標的「每站出現一次」靠的是 `[bg | full | bg]` 三段長條加上每站一圈的 pan，而 far 只走 0.35 圈。不要繞過快取直接呼叫。
 
-9. **字型、`cabin.jpg`、`cabin/cabin-front.png` 都在 `layout.tsx` 裡 preload。** cabin.jpg 只有進 ride 相位才進 DOM，沒有 preload 的話第一次搭車必然看到 pop-in。它同時是 LCP 候選，所以壓縮預算是 **≤ 500 KB**（現在 150 KB；4:4:4 不要動——圖裡的告示與海報都是小字，色度取樣一減就糊）。**下次換基底請盡量拿到原生 2× 尺寸**：現行 1672×941 在 1920 寬的桌機已經要放大 1.19×（retina 再 ×2），②之前的 2715×1528 版本沒有這個問題。
+9. **字型、`cabin.jpg`、`cabin/cabin-front.png` 都在 `layout.tsx` 裡 preload。** cabin.jpg 只有進 ride 相位才進 DOM，沒有 preload 的話第一次搭車必然看到 pop-in。**場景端這兩張要用原生 `new Image()` 讀，不要用 three 的 `TextureLoader`**：後者預設帶 `crossOrigin = "anonymous"`，和沒有 crossorigin 的 preload credentials mode 對不上，瀏覽器會整張再下載一次（實測 cabin-front 被抓兩次）。它同時是 LCP 候選，所以壓縮預算是 **≤ 500 KB**（現在 150 KB；4:4:4 不要動——圖裡的告示與海報都是小字，色度取樣一減就糊）。**下次換基底請盡量拿到原生 2× 尺寸**：現行 1672×941 在 1920 寬的桌機已經要放大 1.19×（retina 再 ×2），②之前的 2715×1528 版本沒有這個問題。
 
 10. **`Door3D` 不可以條件式掛載，cleanup 也不可以 `loseContext()` / `renderer.dispose()`。** 一個 `<canvas>` 一輩子只有一個 WebGL context（`getContext` 對同一元素永遠回傳同一物件），被 `loseContext()` 殺掉就再也活不過來。舊寫法是「離開門相位就卸載」+ cleanup 呼叫 `loseContext()`，於是上下捲一趟就建/毀一次 context；dev 的 StrictMode 更會 mount→cleanup→mount，第二次拿到的正是剛被殺掉的 context，之後所有 `gl.*` 都是 no-op（實測 `isContextLost() === true`）→ **整頁白屏**，而且 refresh 才會好。現在：永遠掛載、用 `display:none` 收起來、只在真的離開頁面時交給瀏覽器回收，另外掛 `webglcontextlost`/`restored` 做二次保險。
 
@@ -132,7 +160,12 @@ public/
 
 12. **`ScrollJourney` 的開頁 `scrollTo(0, 0)` 用 module-scope 旗標擋住。** effect 在 StrictMode/HMR 下會 re-run，那時使用者可能已經在車廂裡，再歸零一次會把人硬拉回月台（`scrollRestoration = "manual"` 要保留，那個沒問題）。
 
-13. **`cabin.jpg` 與立柱前景層的 grade `filter` 要各套一次，不要包一層 div 一起套。** 包起來省一趟濾鏡（4× throttle 下 p50 反而比階段 0 還快），代價是那一層會先被光柵化成一張圖、再交給 sway 的 `scale(1.035)` 縮放 —— 等於多一次重取樣，實測車廂圖上的小字會軟掉（博愛座海報區的橫向梯度能量 −15%、告示區 −6%）。cabin.jpg 在 1920 寬的桌機本來就要放大 1.19×（坑 9），禁不起再軟一次。這一項是**畫質優先於幀時**的取捨，改動前請先量梯度能量。
+13. **（降級路徑）`cabin.jpg` 與立柱前景層的 grade `filter` 要各套一次，不要包一層 div 一起套。** 包起來省一趟濾鏡（4× throttle 下 p50 反而比階段 0 還快），代價是那一層會先被光柵化成一張圖、再交給 sway 的 `scale(1.035)` 縮放 —— 等於多一次重取樣，實測車廂圖上的小字會軟掉（博愛座海報區的橫向梯度能量 −15%、告示區 −6%）。cabin.jpg 在 1920 寬的桌機本來就要放大 1.19×（坑 9），禁不起再軟一次。這一項是**畫質優先於幀時**的取捨，改動前請先量梯度能量。
+
+14. **3D 場景的 canvas 不可以吃 sway 那層的 `scale(1.035)`。** 同一個坑的 WebGL 版：canvas 是一張已經光柵化的點陣圖，交給合成器縮放就是多一次雙線性重取樣 —— 實測(1440×900、dpr 1)車廂上的小字橫向梯度能量掉 **12.6%**(告示區)/ **7.1%**(海報區),正是坑 13 拒絕過的量級。DOM 的 `<img>` 沒這問題(瀏覽器會直接用最終尺寸光柵化原圖)。
+    正解是**過掃描留在元素上**:`.cabin-canvas` 用 `inset: -1.75%` 讓盒子自己大 3.5%,sway 迴圈只寫位移與旋轉(沒有 scale),相機 `zoom = 1/1.035` 把視野等比放大回來 —— 三者互相抵消,門過場在螢幕上一個像素都沒變(實測 profile 互相關 scale 0.9995–1.0000、位移 ≤ 0.25px),而小字反而比 DOM 版更銳(海報 +2.7%、告示 +2.3%)。改這三個數字之一就要三個一起改。
+
+15. **`Window.tsx` 的 crossfade 舊層移除計時器要掛在 `layers.length` 上,不能掛在 `layers` 上。** raf 把 `on` 改成 true → `layers` 換新陣列 → effect 重跑 → cleanup 先把計時器清掉,而重跑時已經沒有 pending 就直接 return —— 舊層於是永遠留在 DOM。實測 L1 版(當時這還是主路徑)走完六站累積 **17 張 canvas**,每一張的 `useFrame` 每幀都還在 blit。`length` 不會被 `on` 的翻面改動,所以計時器活得下來(修正後穩定在 3 張 + 門的 canvas)。
 
 ## 慣例
 

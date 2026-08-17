@@ -99,27 +99,21 @@ a { color: var(--green); }
     radial-gradient(ellipse 30% 30% at 100% 4%, rgba(255, 255, 255, .03), transparent 70%);
 }
 
-/* 隧道段(A5)。全部只動 opacity / transform(合成層),而且全部由捲動的 u 驅動,
-   沒有任何 CSS animation —— 倒著捲要能倒著出洞,animation 做不到這件事。
-   位置一律 inset/%:直式手機的 cover 會把車廂裁掉一大塊,寫死 px 就跑到畫面外了。 */
-.win-dim { position: absolute; inset: 0; pointer-events: none; background: #04070c; }
-/* 洞口那道垂直暗帶:一片比窗還寬的軟邊暗帶掃過去,讀成「車頭鑽進洞裡」的那一瞬間 */
-.win-dim-band {
-  position: absolute; top: 0; bottom: 0; left: 0; width: 70%; pointer-events: none;
-  background: linear-gradient(90deg, transparent, rgba(4, 7, 12, .85) 35%, rgba(4, 7, 12, .95) 65%, transparent);
+/* L2a:疊在 WebGL 車廂上的 DOM 層(components/CabinFrame.tsx)。
+   幾何與 CabinComposite 是同一組 cover —— 寬度那條紅線見坑 4,aspect-ratio 就是
+   cabin.jpg 的 1672×941(用比例而不是 height:auto,因為這一層裡沒有那張 img)。
+   它排在 .cabin-canvas 之後(同一個 .camera 底下),所以自然疊在車廂之上。
+   opacity 由 ScrollJourney 每幀寫(門推軌停下的 doorP 0.85 起淡入)。
+   隧道段(A5)、月台層(B2)、窗景壓暗都不在這裡 —— 它們在場景裡有深度地實作
+   (door3d/cabin.ts 的 shader),那正是 L2 相對於 CSS overlay 的升級。 */
+.cabin-frame {
+  position: relative; width: max(100vw, 177.68vh); aspect-ratio: 1672 / 941;
+  pointer-events: none;
 }
-/* 洞裡的車內光:極淡的暖色提亮。隧道是唯一「車內比車外亮」成立的地方(audit §3.1) */
-.tunnel-lift { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse 70% 55% at 50% 42%, rgba(255, 186, 110, .55), rgba(255, 150, 70, .12) 70%, transparent); }
-/* 洞壁的燈帶掃過內壁:元素寬 200%,gradient 週期 50% → 兩道帶子相隔剛好一個畫面寬,
-   位移 50% 就是「整段隧道掃過一輪」。刻意只有一輪:這段捲動距離只有 ~126px,
-   兩輪以上在快速捲動下會逼近 WCAG 2.3.1 的 3Hz 紅線。 */
-.tunnel-sweep { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
-.tunnel-sweep-band {
-  position: absolute; top: 0; bottom: 0; left: 0; width: 200%;
-  background: repeating-linear-gradient(100deg, transparent 0 20%, rgba(255, 193, 122, .11) 25%, transparent 30% 50%);
-}
-/* 出洞回光:光從窗外潑回來 */
-.tunnel-flash { position: absolute; inset: 0; pointer-events: none; background: rgba(226, 238, 255, 1); }
+/* 跑馬燈的**面板底色不在 DOM**:那是場景那張牆貼圖裡被塗成 #050805 的矩形。
+   這裡留一片不透明的面板會蓋掉場景裡橫杆壓在跑馬燈前面的那 8px —— 深度就反了
+   (理由見 CabinComposite 的節點順序註解)。 */
+.cabin-frame .led { background: transparent; }
 
 /* 綠色線稿車廂(Boot) */
 .wirecar { width: 100%; height: 100%; filter: drop-shadow(0 0 2.5px rgba(6, 255, 49, .55)); }
@@ -219,13 +213,25 @@ a { color: var(--green); }
 @keyframes rise { from { opacity: 0; transform: translateY(14px); } }
 @media (prefers-reduced-motion: reduce) { .detail-modal, .detail-card { animation: none; } }
 
-/* 車門開啟過場(Door3D 的 three.js 場景):蓋住車廂、墊在 start 按鈕之下。
+/* L2a:three.js 場景的外殼。**自己大 5.5%**(inset -2.75% 兩側),位移與旋轉由 sway 迴圈
+   每幀寫進 transform,但**沒有 scale** —— canvas 是已經光柵化的點陣圖,交給合成器縮放
+   會多一次雙線性重取樣,實測車廂上的小字梯度能量掉 12.6%(坑 13 拒絕過的量級,見坑 14)。
+   為什麼是 5% 而不是 sway 的 3.5%:過掃描要蓋住的是**螢幕上的位移**(滑鼠 ±15px + A1
+   底噪 + rotateY 在 perspective 下把一邊拉進來的那幾 px),而百分比是相對視窗算的 ——
+   1440 寬時 1.75% = 25px 夠用,390 寬時只有 6.8px,滑鼠推到角落就會露出舞台底色
+   (實測整條左緣 817 列)。5.5% 給到 1440 → 39.6px / 390 → 10.7px,再配上 sway 迴圈裡
+   隨視窗寬度縮小的振幅(見 ScrollJourney 的 AMP),兩端都有餘裕。
+   ⚠ 這個數字與 door3d/scene.ts 的 CANVAS_OVER 必須一致(相機 zoom 靠它抵消)。
+   z-index 用預設(auto):同一個堆疊脈絡裡靠 DOM 順序決定 —— 它排在 sway(車廂疊層、
+   資訊卡、路線圖)之前,所以那些東西自然疊在車廂上面。 */
+.cabin-canvas { position: absolute; inset: -2.75%; pointer-events: none; will-change: transform; }
+/* 車門開啟過場(Door3D 的 three.js 場景)。
    不給 CSS 底色 —— 沒有 WebGL(或 three 的 chunk 載不下來)時保持透明,退回直接切換 */
-.door-canvas { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 7; pointer-events: none; }
+.door-canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 /* 門開完就收起來:元素留在 DOM(WebGL context 不能反覆建/毀),但不佔合成層 */
 .door-canvas-idle { display: none; }
 
-/* Start ride 按鈕(z-index 要壓過 door canvas) */
+/* Start ride 按鈕(z-index 要壓過 .camera —— 它是 z-auto 的定位元素) */
 .start { position: relative; z-index: 8; font-family: var(--font-led); font-size: clamp(20px, 3vw, 34px); letter-spacing: .14em; color: var(--green); background: none; border: none; cursor: pointer; text-shadow: 0 0 12px rgba(6, 255, 49, .9), 0 0 30px rgba(6, 255, 49, .5); animation: pulse 2.2s ease-in-out infinite; }
 .start:active { transform: translateY(1px); }
 .detail-btn:active, .concourse-link:active, .ctrl:active { transform: translateY(1px); }

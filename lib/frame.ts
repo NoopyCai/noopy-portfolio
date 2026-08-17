@@ -1,6 +1,6 @@
 "use client";
 import { useLayoutEffect, useEffect, useRef } from "react";
-import type { Grade } from "@/content/stations";
+import type { Grade, SceneType } from "@/content/stations";
 
 // 階段 0(audit §4.3):捲動的**連續量**不再經過 React。
 //
@@ -36,6 +36,12 @@ export type Frame = {
   platform: number;
   /** A5:隧道覆蓋層,null = 區間外 */
   tunnel: TunnelFx | null;
+  /** L2a 站切換 crossfade:由 x 驅動(不是計時器),所以倒著捲就是倒著溶。
+   *  sceneA = 正在離開的站、sceneB = 正在進入的站、mix = B 疊在 A 之上的不透明度。
+   *  DOM 車廂(降級路徑)不吃這三個 —— 它照舊用 React 掛新層 + CSS transition。 */
+  sceneA: SceneType;
+  sceneB: SceneType;
+  mix: number;
 };
 
 export type FrameBus = {
@@ -46,8 +52,8 @@ export type FrameBus = {
   subscribe(fn: () => void): () => void;
 };
 
-export function createFrameBus(initial: Grade): FrameBus {
-  const frame: Frame = { x: 0, grade: initial, platform: 0, tunnel: null };
+export function createFrameBus(initial: Grade, initialScene: SceneType): FrameBus {
+  const frame: Frame = { x: 0, grade: initial, platform: 0, tunnel: null, sceneA: initialScene, sceneB: initialScene, mix: 0 };
   const subs = new Set<() => void>();
   return {
     frame,
@@ -76,18 +82,4 @@ export function useFrame(bus: FrameBus, fn: () => void) {
   const latest = useRef(fn);
   latest.current = fn;
   useIsoLayoutEffect(() => bus.subscribe(() => latest.current()), [bus]);
-}
-
-// 值沒變就不要寫:display 是每幀路徑,同值重寫會讓瀏覽器重新解析一次 inline style。
-//
-// 這裡刻意**只**擋 display,不做泛用的 style write-through 快取。試過一版把 filter /
-// background / transform / opacity 全部快取起來(理論上就是 React reconciler 本來幫我們
-// 做的事),結果在逐格截圖 diff 上跑出 102 個 Δ1 的像素 —— 全落在畫面最暗的那塊車頂,
-// 是 tint 那層 soft-light 混色的次-LSB 捨入,肉眼看不出來,但它不是時間性噪點,
-// 而「視覺零變化」是這次重構的硬驗收。省下的每幀成本在 4× throttle 下也量不出來
-// (交錯 A/B 四輪:p50 107.8 → 106.4ms),所以不值得拿它換。
-export function setShown(el: HTMLElement | null, on: boolean) {
-  if (!el) return;
-  const want = on ? "" : "none";
-  if (el.style.display !== want) el.style.display = want;
 }
