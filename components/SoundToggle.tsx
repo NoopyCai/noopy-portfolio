@@ -3,17 +3,18 @@ import { useState } from "react";
 import { Icon } from "./Icon";
 
 let sfx: HTMLAudioElement | null = null; // 進站音效 train_sounds.mp3
-let music: HTMLAudioElement | null = null; // 背景音樂 music.mp3(淡入/淡出循環)
+let music: HTMLAudioElement | null = null; // 背景音樂 music.mp3(無縫 loop,原生循環)
 let started = false; // 是否已啟動聲軌(點過開始乘車)
 let muted = false;
-let fadedOut = false; // 本輪是否已在尾端啟動淡出
 
 const VOL = { sfx: 0.5, music: 0.35 }; // 上限音量
 const FADE = 1.6; // 音樂淡入/淡出秒數
 const SFX_FADE = 1.0; // 進站音效淡入秒數
 
 const rafs = new WeakMap<HTMLAudioElement, number>();
-function fadeTo(el: HTMLAudioElement, target: number, dur: number) {
+// onDone 只在這一輪 ramp 自然跑完才呼叫 —— 中途被新的 fadeTo 取消就不會觸發(靠這個避免
+// 「淡出中被取消靜音,結果稍後那個 pause 才姍姍來遲」)
+function fadeTo(el: HTMLAudioElement, target: number, dur: number, onDone?: () => void) {
   cancelAnimationFrame(rafs.get(el) ?? 0);
   const start = el.volume;
   const t0 = performance.now();
@@ -21,6 +22,7 @@ function fadeTo(el: HTMLAudioElement, target: number, dur: number) {
     const t = dur <= 0 ? 1 : Math.min(1, (now - t0) / (dur * 1000));
     el.volume = Math.max(0, Math.min(1, start + (target - start) * t));
     if (t < 1) rafs.set(el, requestAnimationFrame(step));
+    else onDone?.();
   };
   rafs.set(el, requestAnimationFrame(step));
 }
@@ -29,15 +31,6 @@ function playFromStart(el: HTMLAudioElement, vol: number, dur: number) {
   el.volume = 0;
   el.play().then(() => fadeTo(el, vol, dur)).catch(() => { /* autoplay 被擋:等使用者手勢 */ });
 }
-function onTime() {
-  if (!music || !music.duration || fadedOut) return;
-  const left = music.duration - music.currentTime;
-  if (left <= FADE) { fadedOut = true; fadeTo(music, 0, left); } // 循環尾端淡出
-}
-function onEnded() {
-  if (started && !muted) { fadedOut = false; playFromStart(music!, VOL.music, FADE); } // 手動循環 + 重新淡入
-}
-
 function ensure(): boolean {
   if (typeof Audio === "undefined") return false;
   if (!sfx) { sfx = new Audio("/train_sounds.mp3"); sfx.preload = "auto"; sfx.volume = 0; }
@@ -45,27 +38,34 @@ function ensure(): boolean {
     music = new Audio("/music.mp3");
     music.preload = "auto";
     music.volume = 0;
-    music.addEventListener("timeupdate", onTime);
-    music.addEventListener("ended", onEnded); // loop=false,自行循環以套用淡入
+    // music.mp3 是剪過的 16 小節無縫 loop(43.64s,首尾已烤進 60ms 等功率交叉淡化),所以交給
+    // 原生 loop 直接接回去。舊版是「timeupdate 監看尾端 → 淡出 → ended → 從頭再淡入」的手動
+    // 循環,那是為 4 分半的完整曲子寫的:整首播完再從頭來會露出樂曲的起承轉合,只好用淡出遮掉。
+    // 換成 loop 素材後那套反而有害 —— 每 43 秒就把音樂抹掉再拉回來,節奏會被硬生生打斷一次。
+    music.loop = true;
   }
   return true;
 }
 
-// 啟動聲軌:進站音效淡入 → 結束後淡入背景音樂;每輪循環尾端淡出、頭段淡入
+// 啟動聲軌:進站音效淡入 → 結束後淡入背景音樂(只有這第一次進場需要淡入,之後由原生 loop 續著跑)
 export function startSoundtrack() {
   if (muted || !ensure()) return;
   started = true;
   music!.pause();
-  sfx!.onended = () => { if (started && !muted) { fadedOut = false; playFromStart(music!, VOL.music, FADE); } };
+  sfx!.onended = () => { if (started && !muted) playFromStart(music!, VOL.music, FADE); };
   playFromStart(sfx!, VOL.sfx, SFX_FADE);
 }
 
-// 靜音切換:靜音時暫停;取消靜音且已啟動則淡入恢復背景音樂
+// 靜音切換:淡出後才暫停(直接 pause 會在波形中途硬切成無聲);取消靜音則從原處續播並淡入
 export function setMuted(v: boolean) {
   muted = v;
   if (!ensure()) return;
-  if (v) { sfx!.pause(); music!.pause(); }
-  else if (started) { music!.play().then(() => fadeTo(music!, VOL.music, FADE)).catch(() => {}); }
+  if (v) {
+    sfx!.pause();
+    fadeTo(music!, 0, FADE, () => { if (muted) music!.pause(); });
+  } else if (started) {
+    music!.play().then(() => fadeTo(music!, VOL.music, FADE)).catch(() => {});
+  }
 }
 
 // 靜音鍵:圖示化、左上角低調擺放(WCAG 1.4.2 — 會持續播放的聲音必須給停止的方法)
