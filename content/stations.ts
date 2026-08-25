@@ -46,6 +46,8 @@ export type Station = {
   // 時刻表看板的「月台」欄。純主題性的月台代號(這是一列虛構的夜車),
   // 刻意不等於站序,不然那一欄只是把第一欄再寫一次。
   platform: string;
+  // 時刻表看板的「狀態」欄:用行車狀態說專案狀態(上線 = 正點抵達、進行中 = 行駛中)
+  status: Bi;
   panel: PanelData;
 };
 
@@ -76,6 +78,7 @@ export const STATIONS: Station[] = [
     // 傍晚月台:冷藍,但月台燈池本身是暖的(場景裡畫的)。整條曲線的起點。
     grade: { brightness: 0.95, saturate: 1, tint: "rgba(120,150,190,0.16)" },
     platform: "1A",
+    status: { zh: "本日始發", en: "First departure" },
     panel: {
       kind: "hero",
       title: { zh: "蔡守傑 NoopyCai", en: "NoopyCai" },
@@ -97,6 +100,7 @@ export const STATIONS: Station[] = [
     // 黃昏市郊:全程唯一的暖亮峰,天黑之前最後一段有色溫的光。
     grade: { brightness: 1.05, saturate: 1.12, tint: "rgba(255,140,50,0.30)" },
     platform: "2A",
+    status: { zh: "正點抵達", en: "Arrived on time" },
     panel: {
       kind: "project",
       title: { zh: "電商推薦系統", en: "Recommendation Engine" },
@@ -133,6 +137,7 @@ export const STATIONS: Station[] = [
     // 深夜跨河:曲線的谷底。舊版靠 multiply 壓暗,改 soft-light 後改由 brightness 壓。
     grade: { brightness: 0.72, saturate: 0.85, tint: "rgba(30,60,120,0.34)" },
     platform: "2B",
+    status: { zh: "正點抵達", en: "Arrived on time" },
     panel: {
       kind: "project",
       title: { zh: "LINE LIFF × Magento2 會員綁定", en: "LINE LIFF × Magento2 Binding" },
@@ -169,6 +174,7 @@ export const STATIONS: Station[] = [
     // 是全站最嚴重的對比崩壞來源,也是夜車敘事被打斷的地方(audit §1.2 / §3.1)。
     grade: { brightness: 0.86, saturate: 1.05, tint: "rgba(60,90,150,0.28)" },
     platform: "3A",
+    status: { zh: "行駛中", en: "In service" },
     panel: {
       kind: "project",
       title: { zh: "AI 工具整合", en: "AI Automation Toolkit" },
@@ -203,6 +209,7 @@ export const STATIONS: Station[] = [
     // 凌晨田野(blue hour):黎明前最暗的一段,只有零星農舍燈火。技能站放在這裡有隱喻。
     grade: { brightness: 0.8, saturate: 0.9, tint: "rgba(48,76,120,0.30)" },
     platform: "3B",
+    status: { zh: "加開列車", en: "Extra service" },
     panel: {
       kind: "skills",
       title: { zh: "技術棧", en: "Tech Stack" },
@@ -223,6 +230,7 @@ export const STATIONS: Station[] = [
     // 破曉海景:唯一的亮結尾。捲到底 = 搭了一夜車、天亮了。
     grade: { brightness: 1.03, saturate: 1.05, tint: "rgba(255,150,170,0.22)" },
     platform: "4A",
+    status: { zh: "終點站", en: "Terminus" },
     panel: {
       kind: "contact",
       title: { zh: "抵達終點・保持聯絡", en: "End of the line · let's talk" },

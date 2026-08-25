@@ -94,6 +94,7 @@ export function Concourse({ overlap = false }: { overlap?: boolean }) {
               <tr>
                 <th scope="col" className="tt-no">{t({ zh: "序", en: "No." })}</th>
                 <th scope="col">{t({ zh: "站名", en: "Station" })}</th>
+                <th scope="col" className="tt-st">{t({ zh: "狀態", en: "Status" })}</th>
                 <th scope="col" className="tt-year">{t({ zh: "年份", en: "Year" })}</th>
                 <th scope="col">{t({ zh: "停靠內容", en: "Calling at" })}</th>
                 <th scope="col" className="tt-plat">{t({ zh: "月台", en: "Plat." })}</th>
@@ -126,6 +127,9 @@ export function Concourse({ overlap = false }: { overlap?: boolean }) {
                       ) : (
                         name
                       )}
+                    </td>
+                    <td className={`tt-st${s.status.en.includes("on time") ? " is-ontime" : ""}`}>
+                      {t(s.status)}
                     </td>
                     <td className="tt-year">{s.panel.year ?? "·"}</td>
                     <td className="tt-stop">{t(stopText(s))}</td>

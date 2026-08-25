@@ -284,6 +284,9 @@ a { color: var(--green); }
 .tt-row .tt-station { color: var(--text); }
 .tt-row .tt-stop { color: var(--muted); font-size: 13.5px; }
 .timetable .tt-plat { text-align: right; }
+/* 狀態欄:用行車狀態說專案狀態。含「正點」(on time)用綠色 LED,其餘琥珀 */
+.tt-row .tt-st { font-family: var(--font-led); font-size: 12px; letter-spacing: .08em; color: var(--amber); white-space: nowrap; }
+.tt-row .tt-st.is-ontime { color: var(--green); }
 /* 跳站的按鈕長得就是站名本身(整列可點只是滑鼠的便利,鍵盤走這顆) */
 .tt-jump { font: inherit; color: inherit; letter-spacing: inherit; background: none; border: none; padding: 0; text-align: left; cursor: pointer; }
 .tt-row.is-jumpable { cursor: pointer; }
@@ -400,7 +403,8 @@ a { color: var(--green); }
   .tt-row td { padding: 0; }
   .tt-row .tt-stop { grid-column: 1 / -1; font-size: 13px; line-height: 1.5; }
   .tt-row .tt-plat { display: none; }
-  .tt-row .tt-year { text-align: right; }
+  .tt-row .tt-year { display: none; } /* 窄幅讓位給狀態欄:年份在資訊卡裡有 */
+  .tt-row .tt-st { text-align: right; }
   /* 卡列沒有 hover:背景改掛在整列上,:active 才會是一整塊而不是三個色塊 */
   .tt-row.is-jumpable:hover td, .tt-row.is-jumpable:active td { background: none; }
   .tt-row.is-jumpable:active { background: rgba(6, 255, 49, .12); border-radius: 8px; }

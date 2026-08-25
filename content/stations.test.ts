@@ -77,6 +77,13 @@ describe("STATIONS", () => {
     expect(p.link).toBeTruthy();
   });
 
+  it("每一站都有雙語狀態(時刻表狀態欄)", () => {
+    for (const s of STATIONS) {
+      expect(s.status.zh.length, s.id).toBeGreaterThan(0);
+      expect(s.status.en.length, s.id).toBeGreaterThan(0);
+    }
+  });
+
   it("never exposes phone or address", () => {
     const blob = JSON.stringify(STATIONS);
     expect(blob).not.toMatch(/0900|四維路|五股/);
