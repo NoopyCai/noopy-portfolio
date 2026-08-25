@@ -239,17 +239,29 @@ a { color: var(--green); }
 @media (prefers-reduced-motion: reduce) { .start { animation: none; } }
 
 /* 到站轉場 → 出站大廳 */
-/* z-index 要壓過 door canvas(7):出站的門關上之後,大廳是疊在門上浮現的 ——
-   「門關 = 簾幕落下」。gate 相位的 start 按鈕(8)與這層不會同時存在,不衝突。 */
-.concourse-intro { position: absolute; inset: 0; z-index: 9; display: grid; justify-items: center; align-content: start; padding-top: 8vh; background: var(--bg); }
-/* 兩個 hero 容器同寬,pin 解除那一幀站名牌才不會橫向位移(時刻表需要 920px 的橫向空間) */
-.concourse-intro-inner { max-width: 920px; width: 100%; padding: 0 24px; }
+/* 這裡曾經有一層 `.concourse-intro`:stage 裡一片自帶底色、只放 hero 的疊層,負責
+   exit 尾段的淡入,pin 解除之後才交棒給正式的 `.concourse`。它有一個幾何上躲不掉的
+   缺陷 —— pinSpacing 讓 stage 在 pin 結束後**還有整整 100vh 要捲走**,而正式大廳排
+   在那之後,所以 p = 1 時兩個站名牌差了剛好一個視口(實測 91 vs 904):捲到旅程盡頭
+   看到的是「hero + 一片空的深色」,還要再空捲約 800px 時刻表才進來。
+   現在改成**正式大廳自己當簾幕**:`.concourse-overlap` 把它上拉一個視口、和 stage 的
+   最後一屏完全重疊,淡入曲線(e 0.80→1.00)原樣搬到它身上。p = 1 那一幀螢幕上就是
+   真的大廳(站名牌位置誤差 0px —— 位移量就等於那個 100vh),而 pin 解除時沒有任何
+   東西換手:它本來就是一般流排版,繼續捲就是繼續讀。 */
+/* 上拉的單位必須是 **vh 不是 dvh**:對齊的對象是 `.stage` 的 `height: 100vh`。
+   position/z-index 是為了贏過 stage —— stage 是 z-auto 的**定位**元素,不宣告的話它
+   會蓋在後面的一般流元素上;10 同時壓過 stage 裡的 start 按鈕(8)與路線圖(6),
+   但仍低於 TopBar / 靜音鍵(50)與 detail modal(40)。
+   opacity 交給 applyFrame 每幀寫,CSS **不給初值**(= 1):reduced-motion 走
+   StaticFallback、根本沒有 ScrollJourney 在寫 opacity,JS 掛掉時也一樣 —— 大廳
+   是這一頁唯一的文字內容,它的可見性不能寄生在 JS 有沒有跑起來。 */
+.concourse-overlap { margin-top: -100vh; position: relative; z-index: 10; }
 .concourse { background: var(--bg); color: var(--text); min-height: 100vh; min-height: 100dvh; padding: 8vh 24px 44px; }
 .concourse-inner { max-width: 920px; margin: 0 auto; display: flex; flex-direction: column; gap: 40px; }
 .concourse-hero { text-align: center; }
 /* 站名牌:CONCOURSE 降為方位小標(11px 的指示牌層級),名字才是牌面。
-   選擇器一律帶 .concourse-hero —— 名字那行在轉場疊層裡是 <p>,不然會被下面
-   那條 `.concourse-hero p` 的顏色蓋掉。 */
+   選擇器一律帶 .concourse-hero,而且 .h1-sign 要排在 `.concourse-hero p` 之後 ——
+   同一層裡的兩條 <p>(eyebrow / role)靠它們自己的 class 拿回顏色。 */
 .concourse-hero .eyebrow-sign { font-family: var(--font-led); font-size: 11px; letter-spacing: .34em; color: var(--emu-green); margin: 0 0 12px; }
 .concourse-hero .h1-sign { font-family: var(--font-led); font-weight: 400; font-size: clamp(40px, 7vw, 76px); letter-spacing: .14em; line-height: 1.05; color: var(--text); margin: 0; text-shadow: 0 0 26px rgba(233, 239, 248, .16); }
 .concourse-hero p { color: var(--muted); font-family: var(--font-led); letter-spacing: .06em; margin: 0; }

@@ -3,17 +3,16 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { STATIONS } from "@/content/stations";
-import { phaseOf, doorProgress, rideProgress, exitProgress, exitDoorProgress, tunnelProgress, lerpGrade, clamp, smooth, stationEase, PHASE, TUNNEL, EXIT_DOOR } from "@/lib/progress";
-// pin 長度與平滑捲動搬到 lib/scroll.ts —— 時刻表(Concourse)要用同一組數字跳站,
-// 而 ScrollJourney 已經 import 了 ConcourseHero,反向 import 會 circular。
-import { TOTAL_LEN, smoothScrollTo } from "@/lib/scroll";
+import { phaseOf, doorProgress, rideProgress, exitProgress, tunnelProgress, lerpGrade, clamp, smooth, stationEase, PHASE, TUNNEL } from "@/lib/progress";
+// pin 長度與平滑捲動放在 lib/scroll.ts:時刻表(Concourse)跳站要用同一組數字,
+// 兩邊都只 import 這個葉子模組,誰也不用 import 對方。
+import { TOTAL_LEN, smoothScrollTo, gateRideEase, GATE_RIDE_MS, GATE_RIDE_P } from "@/lib/scroll";
 import { createFrameBus, useIsoLayoutEffect, type TunnelFx } from "@/lib/frame";
 import { CabinComposite } from "./CabinComposite";
 import { CabinFrame } from "./CabinFrame";
 import { Door3D, type DoorApply, type DoorFrame } from "./Door3D";
 import { StationPanel } from "./StationPanel";
 import { RouteMap } from "./RouteMap";
-import { ConcourseHero } from "./Concourse";
 import { startSoundtrack } from "./SoundToggle";
 import { useLang } from "./LangProvider";
 
@@ -40,12 +39,12 @@ const FRONT_SCALE_REL = 1.0241546;
 // [0.43, 0.57] 也完全落在停站窗口(dist < 0.15)之外 —— 卡片在讀的時候窗景不會在溶。
 const XFADE = 0.07;
 
-// L2a 的出站交棒:車廂與出站的門是**同一個 canvas**(坑 10:一個 canvas 一個 context),
-// 不能像 DOM 版那樣「車廂淡出」與「門淡入」兩層並存。所以門要等車廂那一層完全收乾才接手,
-// 而 e = 0.72 正是 camOpacity 歸零的那一點(EXIT_DOOR.start + 0.10)—— 交界兩側都是
-// 不透明度 0,接得上。代價是門比 DOM 版晚 ~0.04(e)出現,分鏡順序不變。
-const EXIT_HANDOFF = EXIT_DOOR.start + 0.10;
-const EXIT_HANDOFF_DP = (EXIT_HANDOFF - EXIT_DOOR.start) / (EXIT_DOOR.end - EXIT_DOOR.start);
+// L2b:exit 的 DOM 疊層(跑馬燈 + 玻璃反光)淡出的窗口。
+// 它們是**釘在螢幕上**的,而場景相機從 e ≈ 0.06 起就開始升高 —— 牆一動,貼在牆上的
+// 跑馬燈就會漂移。所以在相機真正走遠之前先收掉。0.16 這個長度是算出來的:起身有
+// PITCH_COMP = 0.85 的俯角補償,牆在 e = 0.16 時只滑了約 2px(見 door3d/scene.ts),
+// 淡出走完之前的錯位都在一個像素等級。語意上就是「到站,車內顯示器熄了」。
+const EXIT_DOM_FADE = 0.16;
 
 // 離散狀態:**只有這四個值變化才會 re-render**(audit §4.3 的整個重點)。
 // 連續量(x / grade / doorP / camera transform / 隧道與月台插值)全部走 applyFrame 直寫 DOM。
@@ -68,15 +67,19 @@ export function ScrollJourney() {
   const front = useRef<HTMLDivElement>(null); // L1:立柱前景層的容器(img + 它自己的 tint),sway 迴圈直接寫它的 transform
   const camera = useRef<HTMLDivElement>(null); // A6:玻璃視差的 CSS 變數掛在這層,往下傳給每扇窗
   const gateBtn = useRef<HTMLButtonElement>(null);
-  const intro = useRef<HTMLDivElement>(null);
+  // 出站大廳(exit 尾段的簾幕)。它不是 ScrollJourney 的子節點 —— 是 page.tsx 的兄弟,
+  // 上拉一個視口疊在 stage 上(.concourse-overlap)。整頁只有一個,而 applyFrame 本來就
+  // 是一路直寫 DOM 的通道,為了一個 style 字串把 ref 從 page.tsx 對穿兩層 props 不划算,
+  // 所以第一次用到時就地 querySelector 一次記起來(class 名與 CSS 同一個來源)。
+  const concourse = useRef<HTMLElement | null>(null);
   const doorApply = useRef<DoorApply | null>(null); // Door3D 註冊進來的 imperative 入口
   const phaseRef = useRef<"gate" | "ride" | "exit">("gate");
   const doorRef = useRef(0); // 給 sway 迴圈:門開完才開始跟滑鼠,交棒瞬間位移趨近 0
   const distRef = useRef(1); // 給 sway 迴圈:eased 的到站距離,底噪靠它在停站時收斂到 0
-  const narrowRef = useRef(false); // 給 applyFrame:相機 transform 的手機分支(離散,但每幀要讀)
   const pRef = useRef(0); // 最後一次的 scroll progress(離散變化後要用它重跑一次 applyFrame)
-  const [narrow, setNarrow] = useState(false); // 手機:轉場退化為 2.5D
-  narrowRef.current = narrow;
+  // L2b:這裡原本有一個 narrow(max-width 640)的 state,專門給 exit 的 CSS 假 3D 換一套
+  // 2.5D 變體。整段 exit 進場景之後那個分支沒有意義了 —— 場景相機的運鏡本來就依
+  // camera.aspect 連續調整(出站構圖的 fill、視差振幅),不需要斷點。
 
   // WebGL 能不能用(**用能力判斷,不用 UA/寬度**)。pending 期間先掛 DOM 車廂:
   // 場景是在 idle callback 才 boot 的,而 gate 相位本來就閒著 —— 這樣任何時刻畫面上
@@ -97,14 +100,6 @@ export function ScrollJourney() {
   const [d, setD] = useState<Discrete>({ phase: "gate", index: 0, panelVisible: false, routeVisible: false });
   const dRef = useRef(d);
 
-  useEffect(() => {
-    const mq = window.matchMedia("(max-width: 640px)");
-    const on = () => setNarrow(mq.matches);
-    on();
-    mq.addEventListener("change", on);
-    return () => mq.removeEventListener("change", on);
-  }, []);
-
   // ─────────────────────────────────────────────────────────────────────────
   // applyFrame:每幀的**唯一**入口。ScrollTrigger 的 onUpdate 直接叫它,不經過 React。
   //
@@ -115,7 +110,7 @@ export function ScrollJourney() {
   //     ├─ 連續 ─→ gateBtn.style.opacity
   //     ├─ 連續 ─→ camera.style.{transform, opacity, willChange}
   //     ├─ 連續 ─→ doorApply(doorP, mode, active) ─→ Door3D 的 canvas + three 場景
-  //     ├─ 連續 ─→ intro.style.opacity(Concourse hero 交棒)
+  //     ├─ 連續 ─→ .concourse 的 opacity(出站大廳當簾幕蓋上來)
   //     ├─ 連續 ─→ phaseRef / doorRef / distRef(sway 的 rAF 迴圈每幀讀這三個)
   //     └─ 離散 ─→ setD({ phase, index, panelVisible, routeVisible })  ← 只在真的變了才叫
   //
@@ -185,76 +180,78 @@ export function ScrollJourney() {
     // gate 按鈕:進門前先淡出,不要硬切消失
     if (gateBtn.current) gateBtn.current.style.opacity = String(1 - smooth(clamp((p - 0.09) / 0.04)));
 
-    // 到站相機動畫(第一人稱起身 + 轉身):e 0→1
+    // 到站的相機動畫:e 0→1。
+    // **L2b:整段 exit 已經搬進場景**(door3d/scene.ts 的 EXIT 分鏡表)—— 起身、半拍、
+    // 轉身、退出門外、門關,全部由場景那一台 PerspectiveCamera 演,一鏡到底。
+    // 這裡原本那一組 `.camera` 的 rotateY/translateX/scale(CSS 假 3D)整組刪掉了:
+    // 它是把一整片已經合成好的畫面當紙板轉,轉到 85° 就是一張紙 —— 而場景相機轉的時候
+    // 立柱層(z=-6.5)與牆(z=-8)會真的錯開。
     const e = phase === "exit" ? exitProgress(p) : 0;
-    // 分成兩個讀得出來的動作:起身 → 半拍 → 轉身。
-    // 舊值 rise 0–0.45 與 turn 0.35–1 有 0.1 的重疊,人還沒站直就開始轉,兩個動作糊成一個。
-    // 「停穩」不在這裡寫 —— A1 的 calm 在終點站已經把底噪收乾淨了。
-    const rise = smooth(clamp(e / 0.40)); // 起身:e 0→0.40
-    // e 0.40–0.48 是刻意的半拍:什麼都不動,身體定住,轉身才有起點
-    const turn = smooth(clamp((e - 0.48) / 0.52)); // 轉身:e 0.48→1
-    const camTransform = narrowRef.current
-      ? // 手機 2.5D:起身 + 橫向滑出(輕微轉),省去重 3D rotateY
-        `translateY(${(rise * 7).toFixed(2)}vh) scale(${(1 + rise * 0.1).toFixed(3)}) translateX(${(turn * -72).toFixed(2)}vw) rotateY(${(turn * -22).toFixed(2)}deg)`
-      : // 桌機真 3D:起身 + 轉身
-        `translateY(${(rise * 9).toFixed(2)}vh) scale(${(1 + rise * 0.16).toFixed(3)}) ` +
-        `rotateX(${(rise * 5).toFixed(2)}deg) rotateY(${(turn * -85).toFixed(2)}deg) translateX(${(turn * -14).toFixed(2)}vw)`;
-    // E1 重排的交棒窗口:.camera 在 e 0.62–0.72 淡出,hero 等到門快關上才浮出來
-    // (0.80–1.0)。三段刻意首尾相接而不重疊太多,讀起來就是「轉身 → 門在身後關上 →
-    // 大廳亮起來」。兩層**錯開**而不是等比對溶:車廂內裝與月台側的門是兩個不同的空間,
-    // 50/50 疊在一起是一張雙重曝光(實測截圖確認),讀起來像 bug 不像轉場。
-    // L2a 之後車廂與門是**同一個 canvas**,所以「錯開」從美學選擇變成硬性條件 ——
-    // 門要等 camOpacity 歸零(e = 0.72 = EXIT_HANDOFF)才接手,見下面的 df.fade。
-    const camOpacity = 1 - smooth(clamp((e - EXIT_DOOR.start) / 0.10));
-
-    // 出站的門(E1)。progress / mode / active 必須**同一幀一起**送進去:
-    // 拆成 prop 讓 React 追,mode 會晚一幀 —— 而 exit 起點的 exitDoorP 是 0(門全開),
-    // 用 enter 的分鏡去解讀 0 就是「門全關」,交界那一幀會閃一扇滿版關著的門。
     const ride3d = ride3dRef.current;
-    const exitDoorP = exitDoorProgress(p);
-    // 3D:車廂就在這個 canvas 裡,門必須等車廂收乾才接手(見 EXIT_HANDOFF)。
-    // 降級:canvas 只畫門,車廂在 DOM,兩層可以並存 → 沿用原本的 0.62 起手。
-    const doorExitOn = phase === "exit" && e >= (ride3d ? EXIT_HANDOFF : EXIT_DOOR.start - 0.02);
+
+    // 出站的門與相機都在同一顆鏡頭裡,所以 progress 直接送 e(場景自己算門的開合)。
+    // progress / mode / active 必須**同一幀一起**送進去:拆成 prop 讓 React 追,mode 會
+    // 晚一幀 —— 而 exit 起點的門是全開的,用 enter 的分鏡去解讀 0 就是「門全關」,
+    // 交界那一幀會閃一扇滿版關著的門。
+    const exitScene = ride3d && phase === "exit";
     const df = doorFrame.current;
-    df.progress = doorExitOn ? exitDoorP : doorP;
-    df.mode = doorExitOn ? "exit" : "enter";
-    // 3D 模式下 canvas 就是車廂,全程都要在;降級模式只有門的區間需要它
-    df.active = ride3d || p < PHASE.doorEnd + 0.02 || doorExitOn;
-    df.fade = ride3d
-      ? // 門開完不再淡出(交棒消失,這就是 L2a 的全部重點)。出站的門則從交棒點起淡入,
-        // 起點 opacity 0 接上剛歸零的 camOpacity;0.2 的長度讓它在 hero(e 0.80)之前站滿。
-        doorExitOn ? smooth(clamp((exitDoorP - EXIT_HANDOFF_DP) / 0.15)) : 1
-      : // 降級路徑:維持舊分鏡 —— enter 最後 15% 淡出交給 DOM 車廂(「上車後設備通電」),
-        // exit 0.18→0.48 淡入(刻意排在 .camera 收乾之後,兩個空間 50/50 疊起來是雙重曝光)。
-        df.mode === "exit" ? smooth(clamp((exitDoorP - 0.18) / 0.3)) : 1 - clamp((doorP - 0.85) / 0.15);
+    df.progress = exitScene ? e : doorP;
+    df.mode = exitScene ? "exit" : "enter";
+    // 3D 模式下 canvas 就是車廂,全程都要在;降級模式只有進站門的區間需要它
+    // (降級沒有場景可以轉身,exit 不再有門 —— 見下面的 fallback 分鏡)。
+    df.active = ride3d || p < PHASE.doorEnd + 0.02;
+    // 3D:門開完就不再淡出,exit 也不淡 —— 唯一保留的交棒是最後出站大廳蓋上來,
+    //     而它自帶不透明底色(.concourse 的 background),沒有對位問題。
+    // 降級:enter 最後 15% 淡出交給 DOM 車廂(「上車後設備通電」)。
+    df.fade = ride3d ? 1 : 1 - clamp((doorP - 0.85) / 0.15);
     doorApply.current?.(df);
 
-    // §4.4:這裡原本有每幀的 filter: blur() —— 全視窗高斯模糊是這頁最貴的一筆,
-    // 手機上轉身兩端都在跑。空間感改由 rotateY/translateX/opacity + 出站的門承擔。
     const cam = camera.current;
     if (cam) {
-      // 3D 的出站門接手之後,.camera 這一層只剩下那個 canvas —— 起身/轉身的 transform
-      // 與淡出都已經走完(camOpacity = 0),必須歸位,不然門會跟著轉了 85° 的座標系跑。
-      const handedOver = ride3d && doorExitOn;
-      cam.style.transform = handedOver ? "none" : camTransform;
-      cam.style.opacity = handedOver ? "1" : String(camOpacity);
-      // camOpacity 歸零之後這層已經看不見了,willChange 再留著只是白白佔一個
-      // 合成層(§4.4 的 will-change 收斂)
-      cam.style.willChange = !handedOver && camOpacity > 0 ? "transform, opacity" : "auto";
-      // .camera 一歸位,底下的 DOM 疊層(跑馬燈 + 玻璃)也會跟著「復活」——
-      // 但那時人已經下車了,跑馬燈不該再出現在月台上的門裡。sway 那層自己收掉。
-      // (資訊卡/路線圖在 exit 早就 visible=false / 卸載了,只剩這一層要處理。)
-      if (sway.current) sway.current.style.opacity = handedOver ? "0" : "1";
+      // 3D:`.camera` 這一層全程不動(場景相機才是相機)。
+      // 降級(無 WebGL):沒有場景可以轉身,退回**最單純的一組** —— 起身(上移 + 微推)
+      // 然後整層淡出,黑幕之後 hero 亮起來。刻意不留 rotateY:那正是這次要刪掉的假 3D,
+      // 而且降級路徑的車廂是一張 DOM 照片,轉起來只會更像紙板。
+      const fbRise = smooth(clamp(e / 0.40));
+      const fbFade = phase === "exit" ? 1 - smooth(clamp((e - 0.48) / 0.32)) : 1;
+      cam.style.transform = ride3d ? "none" : `translateY(${(fbRise * 9).toFixed(2)}vh) scale(${(1 + fbRise * 0.16).toFixed(3)})`;
+      cam.style.opacity = ride3d ? "1" : String(fbFade);
+      // 看不見了就別再留合成層(§4.4 的 will-change 收斂)
+      cam.style.willChange = !ride3d && phase === "exit" && fbFade > 0 ? "transform, opacity" : "auto";
+      // L2a 留下的 sway 收合已經沒有用途了(門不再另外接手),永遠是 1
+      if (sway.current) sway.current.style.opacity = "1";
     }
 
-    // L2a:疊在 canvas 車廂上的 DOM 層(跑馬燈 + 玻璃反光)。0.85 是推軌停下的那一點
-    // (dolly 在 doorP 0.85 收斂到 1),從這裡開始場景是靜止的、cover 幾何與 DOM 完全一致,
-    // 所以這段淡入純粹是「設備通電」,不是在對位 —— 舊版整片 canvas 交棒的語意留下來了,
-    // 但要對齊的東西從「一整張車廂」縮到「一行字」。
-    if (frame3d.current) frame3d.current.style.opacity = String(smooth(clamp((doorP - 0.85) / 0.15)));
+    // 疊在 canvas 車廂上的 DOM 層(跑馬燈 + 玻璃反光)。
+    // 淡入:doorP 0.85 是推軌停下的那一點,從這裡開始場景是靜止的、cover 幾何與 DOM 完全
+    //   一致,所以這段純粹是「設備通電」,不是在對位。
+    // 淡出:exit 一開始就收(見 EXIT_DOM_FADE)—— 它釘在螢幕上,相機一動就會跟牆脫節。
+    if (frame3d.current) {
+      const domFade = phase === "exit" ? 1 - smooth(clamp(e / EXIT_DOM_FADE)) : 1;
+      frame3d.current.style.opacity = String(smooth(clamp((doorP - 0.85) / 0.15)) * domFade);
+    }
 
-    // concourse hero 隨門閉合淡入
-    if (intro.current) intro.current.style.opacity = String(smooth(clamp((e - 0.80) / 0.20)));
+    // 出站大廳隨門閉合淡入(曲線與舊的 .concourse-intro 疊層逐位相同)。
+    // 它與 stage 的最後一屏完全重疊,所以 e = 1 那一幀螢幕上就是真的大廳 ——
+    // pin 解除時沒有東西換手,繼續捲就是繼續讀時刻表。
+    // pointer-events:淡入途中它是半透明地蓋在 stage 上,滑鼠事件不該被它吃掉
+    // (完全不透明之後才交還)。CSS 不寫初值,JS 沒跑時大廳照樣可以點。
+    // 門檻是 0.99 不是 1:e = 1 時 (1 - 0.80) / 0.20 在浮點下是 0.9999999999999998,
+    // 拿 `< 1` 當條件會讓旅程走到底的大廳**永遠不可點**(連結、跳站都失效)。
+    // 選擇器是 **.concourse-overlap** 而不是 .concourse:只有「當簾幕用」的那一份該被
+    // 這裡驅動。reduced-motion 的大廳沒有這個 class,不會被寫成 opacity 0。
+    const conc = (concourse.current ??= document.querySelector<HTMLElement>(".concourse-overlap"));
+    if (conc) {
+      const op = smooth(clamp((e - 0.80) / 0.20));
+      // 淡入期間把它**釘在視口頂端**:大廳是一般流元素,不釘的話這 320px 捲動裡站名牌
+      // 會一邊淡入一邊往上滑 320px —— 舊疊層是釘在 pin 住的 stage 裡,原本的感受是
+      // 「原地亮起來」。反向位移 = 版面位置(doc 上 TOTAL_LEN 處)到目前捲動的差,
+      // 所以 p = 1 時它剛好是 0:pin 解除那一刻 transform 歸零、大廳無縫接回一般流,
+      // 不需要任何交棒。exit 之外不套(那時 op = 0,位移多大都看不見)。
+      conc.style.opacity = String(op);
+      conc.style.transform = e > 0 ? `translateY(${(-TOTAL_LEN * (1 - p)).toFixed(2)}px)` : "";
+      conc.style.pointerEvents = op > 0.99 ? "" : "none";
+    }
 
     // ── 這裡以下才是 React ──
     const panelVisible = phase === "ride" && doorP >= 1 && dist < 0.34;
@@ -267,20 +264,28 @@ export function ScrollJourney() {
     }
   }, [bus]);
 
-  // 離散更新剛 commit 完 → 新掛上來的節點(gate 按鈕、.camera、hero)還沒有任何連續量。
+  // 離散更新剛 commit 完 → 新掛上來的節點(gate 按鈕、.camera)還沒有任何連續量。
   // 在 paint 之前補跑一次 applyFrame,它們就不會有「先畫一張預設值再修正」的那一幀。
   // (bus 的訂閱者自己在 useFrame 裡就會立即套用,這裡補的是 ScrollJourney 自己持有的 ref。)
   useIsoLayoutEffect(() => {
     applyFrame(pRef.current);
-  }, [d, narrow, gl, applyFrame]);
+  }, [d, gl, applyFrame]);
 
   useEffect(() => {
     if (!wrap.current || !stage.current) return;
     // pin 建立前文件只有 ~1916px(stage + 出站大廳),之後才被撐到 ~9516px。
-    // 瀏覽器預設的 scrollRestoration 會在那之前就還原位置 → 被 clamp 到出站大廳頂端,
-    // 於是重整時先閃一下最下方的區塊。這頁本來就從「開始乘車」開始,直接關掉還原。
+    // 瀏覽器預設的 scrollRestoration 會在那之前就還原位置 → 被 clamp 進出站大廳,
+    // 於是重整時第一屏是大廳的站名牌(CONCOURSE / NoopyCai)而不是月台。直接關掉還原。
+    //
+    // ⚠️ **必須走 ScrollTrigger.clearScrollMemory,不能只寫 history.scrollRestoration**:
+    // ScrollTrigger 在 module 初始化時就把當下的值快照成 `_scrollRestoration`
+    // (ScrollTrigger.js:2018,發生在 registerPlugin 那一刻,比這個 effect 早),
+    // 之後**每次 refresh 都會把快照寫回去**(_clearScrollMemory,同檔 452 行)。
+    // refresh 至少會在 ScrollTrigger 建立後與 window "load" 各跑一次 —— 也就是說
+    // 我們寫進去的 "manual" 會在幾百毫秒內被 gsap 改回 "auto",這個防護等於沒有。
+    // clearScrollMemory 同時更新 gsap 的快照與 history,refresh 之後才留得住。
     const prevRestore = history.scrollRestoration;
-    history.scrollRestoration = "manual";
+    ScrollTrigger.clearScrollMemory("manual");
     if (!didInitialReset) {
       didInitialReset = true;
       window.scrollTo(0, 0);
@@ -300,7 +305,14 @@ export function ScrollJourney() {
     applyFrame(st.progress); // pin 建好的當下先對一次,不要等第一次捲動
     return () => {
       st.kill();
-      history.scrollRestoration = prevRestore;
+      ScrollTrigger.clearScrollMemory(prevRestore);
+      // 大廳不是這個元件的子節點,卸載不會帶走 applyFrame 寫在它身上的 inline style。
+      // reduced-motion 是「先掛 ScrollJourney、effect 跑完才翻旗標」——不還原的話那三個
+      // 值就永遠停在旅程還沒開始的狀態(opacity 0),整頁文字對 reduced-motion 使用者
+      // 直接消失。StrictMode/HMR 的 cleanup→re-run 也走這裡,還原完下一輪自然會再寫。
+      const c = concourse.current;
+      if (c) { c.style.opacity = ""; c.style.transform = ""; c.style.pointerEvents = ""; }
+      concourse.current = null;
     };
   }, [applyFrame]);
 
@@ -446,7 +458,12 @@ export function ScrollJourney() {
   const showRide = d.phase === "ride" || d.phase === "exit";
 
   return (
-    <div ref={wrap} style={{ position: "relative" }}>
+    // minHeight = pin 之後 pin-spacer 會撐出來的高度(舞台 100vh + TOTAL_LEN),**先用 CSS 佔住**。
+    // 沒有它的話,從 SSR 的 HTML 到 GSAP 建好 pin 之間(手機冷啟動可以是好幾秒、JS 掛掉就是
+    // 永遠)整份文件只有 ~1.8 屏高,出站大廳就直接貼在第一屏底下 —— 只要捲動被還原或使用者
+    // 手動捲一下,第一屏看到的就是大廳的站名牌。pin 建好之後 spacer 高度剛好等於這個值,
+    // min-height 就不再作用(兩者都是 100vh + TOTAL_LEN),對既有版面零影響。
+    <div ref={wrap} style={{ position: "relative", minHeight: `calc(100vh + ${TOTAL_LEN}px)` }}>
       <div
         ref={stage}
         className="stage"
@@ -459,7 +476,9 @@ export function ScrollJourney() {
             onClick={() => {
               startSoundtrack(); // 使用者手勢啟動,不是 autoplay
               const w = wrap.current!;
-              smoothScrollTo(w.offsetTop + TOTAL_LEN * (PHASE.doorEnd + 0.005), 2200); // 捲過整段開門,停在第一站(月台)。1800 太趕,門還沒「開完」人就進去了
+              // 捲過整段開門,停在第一站(月台)。時長與「多少時間分給門」都是 lib/scroll.ts
+              // 的具名常數(GATE_RIDE_MS / GATE_SPLIT_T),要再調快慢改那裡就好。
+              smoothScrollTo(w.offsetTop + TOTAL_LEN * GATE_RIDE_P, GATE_RIDE_MS, gateRideEase);
             }}
           >
             {/* 與 LED 跑馬燈同一套箭頭字元:同樣吃 --font-led 與綠色光暈(不用 icon 就是為了發光) */}
@@ -468,11 +487,16 @@ export function ScrollJourney() {
         )}
         {/* .camera 從 gate 相位就掛著:車門過場的 canvas 現在住在它底下的 sway 層裡
             (見下面),而 canvas 一輩子只能有一個、永不卸載(坑 10)。gate 期間這一層
-            是 identity + opacity 1,只有那個 canvas 在裡面,不影響按鈕(z-index 8)。 */}
+            是 identity + opacity 1,只有那個 canvas 在裡面,不影響按鈕(z-index 8)。
+
+            **這一層必須是 flat(坑 16)**:它底下的 sway 帶著滑鼠視差的
+            rotateX/rotateY,preserve-3d 一旦生效,那片傾斜的平面就會與 z = 0 的資訊卡
+            /路線圖**在 3D 裡相交**,合成器沿交線把卡片切兩半、遠的那半畫到車廂照後面
+            —— 螢幕上就是「卡片被斜切掉一角、而且切線跟著滑鼠跑」。 */}
         <div
           ref={camera}
           className="camera"
-          style={{ position: "absolute", inset: 0, transformStyle: "preserve-3d", transformOrigin: "center 82%" }}
+          style={{ position: "absolute", inset: 0, transformOrigin: "center 82%" }}
         >
           {/* 車門過場 +(WebGL 可用時)整個車廂:three.js 場景。
               progress 0 = 關門待機(門縫漏光),1 = 相機已經穿過門框停在車廂裡 ——
@@ -508,11 +532,6 @@ export function ScrollJourney() {
           {showRide && <StationPanel station={cur} visible={d.panelVisible} />}
           {showRide && d.routeVisible && <RouteMap index={d.index} onJump={jumpTo} />}
         </div>
-        {d.phase === "exit" && (
-          <div ref={intro} className="concourse-intro" style={{ pointerEvents: "none" }}>
-            <div className="concourse-intro-inner"><ConcourseHero /></div>
-          </div>
-        )}
       </div>
     </div>
   );

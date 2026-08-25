@@ -21,12 +21,14 @@ export function rideProgress(p: number) {
 export function exitProgress(p: number) {
   return clamp((p - PHASE.rideEnd) / (1 - PHASE.rideEnd));
 }
-// 出站的門(E1):轉身完成後,車門在**身後**關上 —— 進站那扇門的反放。
-// e 0.62 起淡入(此時 .camera 正好淡出),0.95 完全閉合;0.80–1.0 大廳 hero 疊上來,
-// 「門關 = 簾幕落下」。這段刻意早於 e=1 結束:最後 5% 留給 hero 獨自佔滿畫面。
-export const EXIT_DOOR = { start: 0.62, end: 0.95 } as const;
-export function exitDoorProgress(p: number) {
-  return clamp((exitProgress(p) - EXIT_DOOR.start) / (EXIT_DOOR.end - EXIT_DOOR.start));
+// 出站的門(E1)。L2b 之後這不再是「另一段淡入的過場」而是**同一顆鏡頭裡的一件事**:
+// 相機起身 → 轉身 → 退出門外,門在 e 0.72 開始關(此時相機已經退到月台側,z > 0,
+// 門板才不會從相機身上掃過去),0.96 完全閉合。0.80–1.0 大廳 hero 疊上來,
+// 「門關 = 簾幕落下」;刻意早於 e = 1 結束,最後 4% 留給 hero 獨自佔滿畫面。
+export const EXIT_DOOR = { start: 0.72, end: 0.96 } as const;
+/** e(exitProgress)→ 門的閉合進度:0 = 全開(剛下車),1 = 全閉。場景直接吃這個值。 */
+export function exitDoorAt(e: number) {
+  return clamp((e - EXIT_DOOR.start) / (EXIT_DOOR.end - EXIT_DOOR.start));
 }
 
 // A5 隧道段:LIFF(x=2)→ AI(x=3) 的巡航段正中央,以 **eased x** 定義(唯一座標)。

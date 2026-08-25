@@ -26,10 +26,12 @@ import {
   Scene,
   Texture,
   TextureLoader,
+  Vector3,
   WebGLRenderer,
 } from "three";
 import type { Frame } from "@/lib/frame";
-import { createCabin } from "./cabin";
+import { exitDoorAt } from "@/lib/progress";
+import { FRONT_REL, Z_FRONT, createCabin } from "./cabin";
 import {
   getFloorCanvas,
   getPanelCanvas,
@@ -83,6 +85,40 @@ const HALF_FOV = (FOV * Math.PI) / 360;
 const EXIT_FILL_PORTRAIT = 0.70;
 const EXIT_FILL_WIDE = 0.82;
 
+// ── 出站分鏡(L2b:一鏡到底)─────────────────────────────────────────────────
+// 全部是 e(exitProgress)的區間,沒有時間軸 → 倒著捲就是倒著演(坐回去、門重開)。
+//
+//   0.00–0.10 窗景層深度塌陷。**相機完全不動**,所以螢幕上一個像素都沒變 ——
+//             這 10% 買到的是「之後相機怎麼動,像素窗景都不會吃到透視、也不會從
+//             窗洞邊緣露出底色」(紅線:像素平面必須正對相機)。語意上就是 A1 的
+//             「停穩」再多停一拍。
+//   0.06–0.40 起身:相機升高 RISE_Y,俯角同步補償 PITCH_COMP —— 補償是為了讓**牆**
+//             大致定住(疊在上面的 DOM 跑馬燈才有時間淡出而不穿幫),而立柱層(z=-6.5,
+//             比牆近 1.5 m)補不回來,那個差就是視差。
+//   0.40–0.48 半拍(B4 的節奏常數原樣平移):什麼都不動。
+//   0.48–0.66 轉身:相機繞著**牆面上的樞紐**公轉(不是原地 yaw)—— 原地轉頭在數學上
+//             零視差(繞眼點的旋轉只是同一組射線的重投影),而公轉是真的橫移,
+//             立柱才會相對牆滑動。樞紐選在牆上 = 牆永遠在視野正中,平面佈景不會轉出畫面。
+//   0.62–0.72 轉回:yaw 收乾,身體「站直朝門」。
+//   0.60–0.82 退出:相機沿 z 穿過門洞退到月台側的出站構圖(fill 0.70/0.82)。
+//   0.72–0.96 門關(EXIT_DOOR):相機已經在 z > 0,門板才不會從鏡頭身上掃過去。
+const EXIT = {
+  collapse: 0.10,
+  riseFrom: 0.06, riseTo: 0.40,
+  turnFrom: 0.48, turnTo: 0.66,
+  backFrom: 0.62, backTo: 0.72,
+  outFrom: 0.60, outTo: 0.82,
+} as const;
+const RISE_Y = 0.40;        // 起身升高(米)。坐姿→站姿的眼高差約 0.6,壓到 0.4 是為了下面那條補償
+const PITCH_COMP = 0.85;    // 俯角補償比例:1 = 牆完全定住(起身讀不出來),0 = 牆整片往下滑
+// 轉身的 yaw 上限(度)。**這是平面佈景的硬約束,不是美感選擇**:牆是一片 z = -8 的平面,
+// 公轉 θ 度時視錐的遠角會掃到牆上 x = R·sinθ − R·cosθ·tan(θ + hfov),而牆的半寬只有
+// cover 的 1.035 倍。1440×900(水平半視角 36.7°)實測:θ = 4° 就要開始過掃描,
+// θ = 10° 需要 1.02×、θ = 15° 需要 1.13×、θ = 20° 需要 1.27×。過掃描 = 車廂照被放大,
+// 而放大在螢幕上讀起來就是「鏡頭在推」—— 12° 的峰值(back 曲線會把實際峰值壓到 ~10.4°)
+// 只需要 1.02–1.03×,推得出來但讀不出來。再大就得在轉身中段偷偷 zoom,那是另一種穿幫。
+const TURN_MAX = 12 * (Math.PI / 180);
+
 const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
 const smooth = (t: number) => t * t * (3 - 2 * t);
 const easeOut = (t: number) => 1 - (1 - t) * (1 - t);
@@ -101,7 +137,7 @@ export type DoorScene = {
    */
   render(doorP: number, mode: DoorMode, frame: Frame): void;
   /** 除錯用:回報三角形數與 context 狀態 */
-  stats(): { triangles: number; calls: number; contextLost: boolean; camZ: number; geometries: number; textures: number; frames: number };
+  stats(): { triangles: number; calls: number; contextLost: boolean; camZ: number; camYaw: number; over: number; geometries: number; textures: number; frames: number };
 };
 
 /**
@@ -122,6 +158,9 @@ export function createDoorScene(canvas: HTMLCanvasElement, onReady: () => void):
   scene.fog = new Fog(0x05070a, 4, 18); // 夜深感:遠處自然沉進黑裡,不用畫背景
 
   const camera = new PerspectiveCamera(FOV, 1, 0.05, 60);
+  // YXZ = 先偏航再俯仰(FPS 慣例):出站要同時有 yaw 與 pitch,用預設的 XYZ 會讓地平線
+  // 在轉身時歪掉。yaw = 0 時兩種順序的矩陣完全相同,所以**進站分鏡一個位元都沒動**。
+  camera.rotation.order = "YXZ";
   camera.position.set(0, 0, CAM_Z0);
   // canvas 元素比舞台大 5.5%(過掃描留在元素上,見上面的註解);zoom 把視野等比放大回來,
   // 門過場在螢幕上的大小因此與 L1 版一模一樣(實測 profile 互相關 scale 0.9995–1.0000)。
@@ -392,6 +431,36 @@ export function createDoorScene(canvas: HTMLCanvasElement, onReady: () => void):
   let lastMode: DoorMode = "enter";
   let lastFrame: Frame | null = null;
   let cw = 0, ch = 0;
+  let lastOver = 1; // stats() 回報用(L2b 驗收:佈景被迫放大多少)
+
+  // ── 佈景過掃描的精算(L2b)──────────────────────────────────────────────────
+  // exit 的相機是真的在動,而車廂各層是**凍結在 ride 那一刻**的平面(這正是視差的來源)。
+  // 平面不會自己跟上來,所以每幀要問一次:「這一幀的視錐,有沒有超出這片平面?」
+  // 作法是把四條角射線打到該層的平面上,取最大的 |x| / |y| 除以平面的半寬/半高。
+  // 回傳 ≤ 1 就代表還蓋得住(ride 那一幀是 1/1.035 = 0.966,所以外面 clamp 到 1 之後
+  // **與 2a 逐位相同**);> 1 就是這一幀需要的最小放大倍率。
+  const _dir = new Vector3();
+  const coverNeed = (zPlane: number, halfW: number, halfH: number) => {
+    // ⚠️ 用**舞台**的視角而不是 canvas 的:canvas 比舞台大 5.5%(過掃描留在元素上,坑 14),
+    // 相機的 zoom = 1/1.055 把那 5.5% 補回去 —— 也就是說 canvas 邊緣那一圈本來就落在
+    // 舞台的 overflow: hidden 外面,cover 從來沒有負責蓋住它。把 zoom 算進來會多要 5.5%
+    // 的過掃描,e = 0 就不再與 ride 逐位相同了(實測整片差 1.9%、77.8% 的像素被動到)。
+    const tv = Math.tan(HALF_FOV);
+    const th = tv * camera.aspect;
+    let need = 0;
+    for (let i = 0; i < 4; i++) {
+      _dir.set(i < 2 ? -th : th, i % 2 ? -tv : tv, -1).applyQuaternion(camera.quaternion);
+      if (_dir.z > -1e-3) return 8; // 射線幾乎與平面平行(yaw 已經接近 90°):放棄,交給分鏡別走到這裡
+      const t = (zPlane - camera.position.z) / _dir.z;
+      if (t <= 0) continue;
+      need = Math.max(
+        need,
+        Math.abs(camera.position.x + t * _dir.x) / halfW,
+        Math.abs(camera.position.y + t * _dir.y) / halfH,
+      );
+    }
+    return need;
+  };
 
   const render = (doorP: number, mode: DoorMode, frame: Frame) => {
     lastP = doorP;
@@ -413,20 +482,59 @@ export function createDoorScene(canvas: HTMLCanvasElement, onReady: () => void):
     let slitOpacity: number;
     let jambFade: number;  // 門柱暖邊的衰減係數
     let zoom: number;
+    let over = 1;          // L2b:佈景過掃描(exit 才會 > 1)
+    let collapse = 0;      // L2b:窗景層的深度塌陷
+    // L2b:exit 的佈景**凍結在 ride 那一刻**(不隨相機重算 cover)—— 這就是真視差的來源。
+    // null = 照舊每幀重算(ride / 進站)。
+    let frozen: { ph: number; dist: number } | null = null;
 
     if (mode === "exit") {
-      // ── 出站:機位固定在月台上,門在眼前(語意上是身後)關起來 ──────────────
-      // 不 dolly:推軌是「進去」的語彙,人已經下車了,再往前推就變成又要上車。
-      const close = smooth(clamp01((p - 0.22) / 0.78)); // 前 22% 讓 canvas 先淡入,門還開著
+      // ── 出站(L2b):起身 → 半拍 → 轉身 → 退出門外 → 門關,一顆鏡頭到底 ────────
+      // p 在這個模式下就是 e(exitProgress),分鏡表見檔頭的 EXIT。
+      collapse = smooth(clamp01(p / EXIT.collapse));
+      const rise = smooth(clamp01((p - EXIT.riseFrom) / (EXIT.riseTo - EXIT.riseFrom)));
+      const turn = smooth(clamp01((p - EXIT.turnFrom) / (EXIT.turnTo - EXIT.turnFrom)));
+      const back = smooth(clamp01((p - EXIT.backFrom) / (EXIT.backTo - EXIT.backFrom)));
+      const out = smooth(clamp01((p - EXIT.outFrom) / (EXIT.outTo - EXIT.outFrom)));
+      const close = smooth(exitDoorAt(p));
       open = 1 - close;
       // 門快閉合時才重新有「縫」可以漏光;完全關上時是最亮的一道細線,接著 hero 蓋上來
       slitOpacity = 0.95 * smooth(clamp01((close - 0.55) / 0.45));
-      jambFade = 1;
+      // 門柱暖邊只在「已經站到月台上」之後才有意義(車廂內看不到門柱)。用 out 當閘門
+      // 還有一個硬要求:e = 0 必須與 ride 末幀逐位相同,而 ride 的 jambFade 已經衰減到 0。
+      jambFade = out;
       zoom = 1;
+
+      // 公轉:樞紐擺在牆面(z = CABIN_Z)正中,半徑 = ride 的機位到牆的距離。
+      // θ = 0 時位置與朝向剛好回到 ride 的 (0, 0, CAM_Z1) —— 所以 e = 0 不需要任何特例。
+      const R = CAM_Z1 - CABIN_Z;
+      const yaw = TURN_MAX * turn * (1 - back);
       const fill = lerp(EXIT_FILL_PORTRAIT, EXIT_FILL_WIDE, clamp01((camera.aspect - 1.0) / 0.8));
-      // 相機抬到門洞正中(不是眼高 0):門在畫面裡置中,「門高佔畫面高 fill」才是準的
-      camera.position.set(0, (DOOR_TOP + FLOOR_Y) / 2, (DOOR_TOP - FLOOR_Y) / fill / (2 * Math.tan(HALF_FOV)));
-      camera.rotation.x = 0;
+      // 出站構圖:相機抬到門洞正中(不是眼高 0),門在畫面裡置中,「門高佔畫面高 fill」才是準的
+      const zDoor = (DOOR_TOP - FLOOR_Y) / fill / (2 * Math.tan(HALF_FOV));
+      const yDoor = (DOOR_TOP + FLOOR_Y) / 2;
+      camera.position.set(
+        lerp(R * Math.sin(yaw), 0, out),
+        lerp(RISE_Y * rise, yDoor, out),
+        lerp(CABIN_Z + R * Math.cos(yaw), zDoor, out),
+      );
+      camera.rotation.y = yaw * (1 - out);
+      // 起身時低頭補償(見 PITCH_COMP);退出門外時歸零,末段構圖是正對門的
+      camera.rotation.x = -Math.atan((RISE_Y * rise * PITCH_COMP) / R) * (1 - out);
+
+      // 佈景凍結在 ride 那一刻 → 相機一動就有真視差。代價是平面不會自己跟上視錐,
+      // 所以每幀精算最小過掃描(牆 + 立柱兩層都要蓋得住;其餘層都躲在窗洞裡)。
+      const frozenH = 2 * R * Math.tan(HALF_FOV) * Math.max(1, camera.aspect / CABIN_ASPECT) * SWAY;
+      const frozenW = frozenH * CABIN_ASPECT;
+      const kFront = (R - (Z_FRONT - CABIN_Z)) / R;
+      camera.updateProjectionMatrix(); // coverNeed 讀 camera.aspect / zoom,先確保投影是最新的
+      over = Math.max(
+        1,
+        coverNeed(CABIN_Z, frozenW / 2, frozenH / 2),
+        coverNeed(Z_FRONT, (frozenW * FRONT_REL * kFront) / 2, (frozenH * FRONT_REL * kFront) / 2),
+      );
+      lastOver = over;
+      frozen = { ph: frozenH, dist: R };
     } else {
       // ── 進站:四拍時間軸。全部由 doorP 插值,沒有任何 delta time ────────────
       open = easeOut(clamp01((p - 0.15) / 0.55));       // 0.15–0.70 開門
@@ -437,6 +545,7 @@ export function createDoorScene(canvas: HTMLCanvasElement, onReady: () => void):
       // 人已經進車廂,門框在身後就不該再發光
       jambFade = 1 - smooth(clamp01(dolly / 0.7));
       zoom = 1 + 0.24 * (1 - dolly);
+      lastOver = 1;
       // 拍 3:dolly-in。相機沿 Z 前推穿過門框,俯角在中途回正(末幀必須是 0,否則背板對不上)
       camera.position.set(0, 0, lerp(CAM_Z0, CAM_Z1, dolly));
       camera.rotation.x = PITCH0 * (1 - smooth(clamp01((p - 0.1) / 0.55)));
@@ -468,15 +577,20 @@ export function createDoorScene(canvas: HTMLCanvasElement, onReady: () => void):
     //   CANVAS_OVER):相機 zoom 已經把元素比舞台大的那 5.5% 抵消掉,所以「螢幕上多大」
     //   只由 ph/frustumH 決定 —— 乘 1.035 算出來就是 DOM 車廂的 cover × sway。
     //   zoom 讓早期的車廂稍微放大一點(由深處「落定」),收斂到 1 就是 DOM/cover 的幾何。
-    //   出站模式 zoom 恆 1,車廂只是「門縫裡看得到內裝」的那一塊。
-    const dist = camera.position.z - CABIN_Z;
-    const pitch = Math.abs(camera.rotation.x);
-    // 俯角期間視錐是斜的,用 tan(fov/2 + |pitch|) 取一個略大的保守值,免得上緣露空
-    const frustumH = 2 * dist * Math.tan(HALF_FOV + pitch);
-    const ph = frustumH * Math.max(1, camera.aspect / CABIN_ASPECT) * SWAY * zoom;
-    // 車廂跟著視線中心:俯角歸零、相機在 y=0 時回到 y=0(= enter 末幀的對位條件)
-    const cy = camera.position.y + dist * Math.tan(camera.rotation.x);
-    cabin.update({ camY: camera.position.y, dist, ph, cy, frame, visible: true });
+    //   **出站(L2b)完全不走這一段**:佈景凍結在 ride 的那一組數字,只有相機在動 ——
+    //   cover 重算的定義就是「佈景永遠跟著相機」,而跟著相機就等於沒有視差。
+    if (frozen) {
+      cabin.update({ camY: 0, dist: frozen.dist, ph: frozen.ph, cy: 0, frame, visible: true, over, collapse });
+    } else {
+      const dist = camera.position.z - CABIN_Z;
+      const pitch = Math.abs(camera.rotation.x);
+      // 俯角期間視錐是斜的,用 tan(fov/2 + |pitch|) 取一個略大的保守值,免得上緣露空
+      const frustumH = 2 * dist * Math.tan(HALF_FOV + pitch);
+      const ph = frustumH * Math.max(1, camera.aspect / CABIN_ASPECT) * SWAY * zoom;
+      // 車廂跟著視線中心:俯角歸零、相機在 y=0 時回到 y=0(= enter 末幀的對位條件)
+      const cy = camera.position.y + dist * Math.tan(camera.rotation.x);
+      cabin.update({ camY: camera.position.y, dist, ph, cy, frame, visible: true });
+    }
 
     renderer.render(scene, camera);
   };
@@ -499,6 +613,9 @@ export function createDoorScene(canvas: HTMLCanvasElement, onReady: () => void):
       calls: renderer.info.render.calls,
       contextLost: renderer.getContext().isContextLost(),
       camZ: camera.position.z,
+      // L2b 的驗收要看的兩個數字:相機轉了幾度、佈景被迫放大了多少(紙片穿幫的量測面)
+      camYaw: (camera.rotation.y * 180) / Math.PI,
+      over: lastOver,
       // L2a 的效能預算(spec:<30 calls / <500 tri):車廂那疊平面全程都在,
       // 這兩個數字是驗收要看的。geometries/textures 用來抓「窗景長條有沒有重複上傳」。
       geometries: renderer.info.memory.geometries,

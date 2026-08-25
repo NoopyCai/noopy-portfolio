@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { phaseOf, doorProgress, rideProgress, exitProgress, exitDoorProgress, tunnelProgress, stationAt, lerpGrade, gradeFilter, stationEase, DWELL, PHASE, EXIT_DOOR, TUNNEL } from "./progress";
+import { phaseOf, doorProgress, rideProgress, exitProgress, exitDoorAt, tunnelProgress, stationAt, lerpGrade, gradeFilter, stationEase, DWELL, PHASE, EXIT_DOOR, TUNNEL } from "./progress";
 import { STATIONS, type Grade } from "@/content/stations";
 
 describe("progress", () => {
@@ -23,22 +23,20 @@ describe("progress", () => {
     expect(exitProgress(1)).toBeCloseTo(1, 5);
   });
   // ── E1 出站的門 ──
-  const pOf = (e: number) => PHASE.rideEnd + e * (1 - PHASE.rideEnd); // e → 全域 progress
-  it("exitDoorProgress: ride 期間恆 0(門只在出站才存在)", () => {
-    expect(exitDoorProgress(0.5)).toBe(0);
-    expect(exitDoorProgress(PHASE.rideEnd)).toBe(0);
-    expect(exitDoorProgress(pOf(0.5))).toBe(0); // 起身/半拍/轉身期間門還沒淡入
+  it("exitDoorAt: 起身/半拍/轉身期間恆 0(門要等相機退到月台側才動)", () => {
+    expect(exitDoorAt(0)).toBe(0);
+    expect(exitDoorAt(0.5)).toBe(0);
+    expect(exitDoorAt(EXIT_DOOR.start)).toBeCloseTo(0, 10);
   });
-  it("exitDoorProgress: e 0.62 → 0、0.95 → 1、之後恆 1(門關上就不再動)", () => {
-    expect(exitDoorProgress(pOf(EXIT_DOOR.start))).toBeCloseTo(0, 10);
-    expect(exitDoorProgress(pOf((EXIT_DOOR.start + EXIT_DOOR.end) / 2))).toBeCloseTo(0.5, 10);
-    expect(exitDoorProgress(pOf(EXIT_DOOR.end))).toBeCloseTo(1, 10);
-    expect(exitDoorProgress(1)).toBe(1);
+  it("exitDoorAt: e start → 0、end → 1、之後恆 1(門關上就不再動)", () => {
+    expect(exitDoorAt((EXIT_DOOR.start + EXIT_DOOR.end) / 2)).toBeCloseTo(0.5, 10);
+    expect(exitDoorAt(EXIT_DOOR.end)).toBeCloseTo(1, 10);
+    expect(exitDoorAt(1)).toBe(1);
   });
-  it("exitDoorProgress: 單調不減(倒著捲門就重新打開,不能有折返)", () => {
+  it("exitDoorAt: 單調不減(倒著捲門就重新打開,不能有折返)", () => {
     let prev = -Infinity;
     for (let k = 0; k <= 200; k++) {
-      const v = exitDoorProgress(k / 200);
+      const v = exitDoorAt(exitProgress(k / 200));
       expect(v).toBeGreaterThanOrEqual(prev - 1e-12);
       prev = v;
     }

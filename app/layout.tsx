@@ -71,6 +71,17 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="zh-Hant">
       <head>
+        {/* 捲動還原的**第一道**防線,而且必須在 <head>:
+            ① 瀏覽器的 scroll restoration 發生在解析/版面之後、hydration 之前 —— 等 React
+               的 effect 才寫 "manual" 已經來不及(dev 下編譯 + hydration 可以是好幾秒,
+               那段時間畫面就停在還原後的位置,也就是旅程末段那張「hero + 一片空的深色」)。
+            ② ScrollTrigger 在 registerPlugin 那一刻(= ScrollJourney 的 module 初始化,
+               晚於這支 inline script)把當下的值快照起來,之後每次 refresh 都寫回去。
+               先在這裡設成 manual,gsap 快照到的就是 manual —— ScrollJourney 那邊的
+               clearScrollMemory("manual") 從此只是補刀,不是唯一的防線。
+            刻意**不**在這裡 scrollTo(0,0):歸零是 ScrollJourney 的事(它有 module 旗標
+            擋住 StrictMode/HMR 重跑),這裡多做一次會壓掉 hash 深連結。 */}
+        <script dangerouslySetInnerHTML={{ __html: `try{history.scrollRestoration="manual"}catch(e){}` }} />
         {/* LED 字型:整站標示系統的字,第一屏就要用到 */}
         <link rel="preload" as="font" type="font/woff2" href="/fonts/DepartureMono-Regular.woff2" crossOrigin="anonymous" />
         {/* 車廂圖只有進 ride 相位才進 DOM,不 preload 的話第一次搭車必然看到 pop-in */}

@@ -45,7 +45,8 @@ components/
   Window.tsx            ⚠ 同上(降級路徑):單扇車窗的 crossfade + 水平流動(canvas blit)
   StationPanel.tsx      作品資訊卡(liquid glass)+「看細節」modal
   RouteMap.tsx          右側六站進度點,點擊跳站
-  Concourse.tsx         出站大廳(ConcourseHero 由轉場與正式區塊共用,確保交棒無縫)
+  Concourse.tsx         出站大廳。`overlap` = 有旅程時它**自己就是 exit 尾段的簾幕**
+                        (上拉一個視口疊在 stage 上,見下方「出站入景」)
   StaticFallback.tsx    reduced-motion 的語意化降級版
   Icon.tsx              lucide 薄包裝,語意固定
   SoundToggle.tsx       音軌狀態機(module scope)+ 左上角靜音鍵
@@ -71,10 +72,10 @@ public/
 
 | 相位 | progress | 畫面 |
 |---|---|---|
-| `gate` | 0 → 0.13 | 「開始乘車 ►」按鈕（0.09 起淡出） |
+| `gate` | 0 → 0.13 | 「開始乘車 ►」按鈕（0.09 起淡出）。按下去是代捲到 `GATE_RIDE_P`（`lib/scroll.ts`）：總長 `GATE_RIDE_MS = 3600`，曲線 `gateRideEase` 把**前 40% 的時間**用來衝掉 gate 這段沒有內容的距離（佔 57.8% 的捲動），**剩下 60% 全給門** —— 門段（doorP 0→1）因此實佔 1788ms（舊的 2200ms + easeInOutQuad 只有 779ms）。要再調快慢改那三個具名常數 |
 | （door） | 0.13 → 0.22 | 車門開啟過場：`Door3D` 的 three.js 場景。**不是獨立 phase**（`phaseOf` 回 `ride`），由 `doorProgress` 驅動。門後看到的車廂就是同一個場景裡的東西（窗景是活的） |
 | `ride` | 0.22 → 0.8 | 車廂 + 六站（`rideProgress` 從 doorEnd 起算，門開完剛好停在第一站）。**canvas 不落幕**：相機停在車廂裡，場景繼續當舞台（L2a） |
-| `exit` | 0.8 → 1 | 第一人稱起身 + 轉身，尾段淡出交棒給 Concourse |
+| `exit` | 0.8 → 1 | **一鏡到底**（L2b）：整段由場景相機演 —— 窗景塌陷 → 起身 → 半拍 → 轉身 → 退出門洞 → 門關。分鏡表在 `door3d/scene.ts` 的 `EXIT`，見下方「出站入景」 |
 
 門過場是**真的 3D 場景**（`components/Door3D.tsx` + `components/door3d/`）：three.js、一台 `PerspectiveCamera(50°)`、月台在門外、cabin.jpg 貼在門後 `z = -8` 的背板上。門板/車體/月台地面貼的是 `public/door/*.jpg`（使用者以 `docs/ai-illustration-prompts.md` §D 的 prompt 自行 AI 生成，共 518 KB；`textures.ts` 的程序繪製版是載入失敗時的 runtime fallback，**不可刪**）。材質亮度靠 `EXPOSURE` 常數做曝光補償（`color.setScalar`，材質層級）——燈光與 emissive 不動。**換圖後必須重量三個對位數字**（門縫 x、綠帶 v、導盲磚 v）＋ car-body 的標語橫向相位 `CAR_U0`，量法見 prompts 文件 §D。分鏡全部由 `doorP` 插值，**沒有 delta time、沒有常駐 rAF**，所以倒著捲就是倒著關：
 
@@ -113,17 +114,45 @@ DOM 只剩「永遠不進 WebGL」的東西。z 由遠到近:
 | -6.5 | 立柱 + 橫杆 | `cabin/cabin-front.png` | 同一個 grade shader,`uLead > 0`(隧道掃光近層先亮) |
 
 - **窗洞是牆自己的 alpha**:壓暗 / 月台 / 窗景全部擺在牆**後面**,洞就是它們的 `overflow: hidden`,圓角自然由牆切。這也是為什麼暗帶掃到窗外不會漏到別扇窗。
-- **各層都重算成 cover**(見上方「cover 幾何」):照片不是模型,它必須永遠填滿畫面(坑 4)。代價是 ride 相機靜止時**層與層之間沒有相對視差** —— L1 的立柱滑鼠視差(K = 1.7)在 3D 模式退役,深度改由窗景差速 / 真窗洞 / 隧道掃光的先後承擔。真正的層視差要等階段 2b(相機真的轉身)。
+- **各層都重算成 cover**(見上方「cover 幾何」):照片不是模型,它必須永遠填滿畫面(坑 4)。代價是 ride 相機靜止時**層與層之間沒有相對視差** —— L1 的立柱滑鼠視差(K = 1.7)在 3D 模式退役,深度改由窗景差速 / 真窗洞 / 隧道掃光的先後承擔。**exit 會把這個 cover 重算關掉**(佈景凍結在 ride 那一刻),真的層視差就從那裡開始 —— 見下方「出站入景」。
 - **grade 是自寫 shader,不是場景燈光**:六站燈光曲線的定義是 CSS 的 `filter: brightness saturate contrast` + 一層 soft-light 的 tint(DESIGN.md §1),映射成 Ambient/Point 等於重調一次曲線。所以 `cabin.ts` 把那三個 filter 函式與 soft-light 的**規格算式**原樣搬進 fragment shader,貼圖走 `NoColorSpace`(取樣拿到的就是 sRGB 值)、輸出不做色彩空間轉換 —— 算式因此和合成器在做的事逐位對應。實測六站 + 隧道的車廂壁 / 座椅 / 海報 / 天花板取樣點,與 L1 的 DOM 版**差 ≤ 2/255**。
 - **窗景 pan 走 `texture.offset.x`**:長條上傳一次,每幀只改 uv(舊版是每幀兩次 `drawImage` × 3 扇窗)。`repeat/offset` 同時吃 `objectFit: cover` + `objectPosition` 的取樣框(每扇窗的裁切框是常數,因為窗框的螢幕比例 = `(w/h) × CABIN_ASPECT` 與視窗大小無關)。offset 做**整數對齊**,理由同 blit 版(像素風景不能次像素平移)。同一站的長條 `clone()` 給三扇窗共用 source = 只上傳一次。
 - **站切換 crossfade 由 x 驅動**(`XFADE = 0.07`,`ScrollJourney`):A = 離開中的站、B = 進入中的站,`frame.mix` 是 B 疊在 A 上的不透明度。倒著捲就是倒著溶,而且零 re-render(舊版是掛新層 + CSS transition,一次換站 7 次 commit → 現在 5 次)。**代價**:沒有時間軸就沒有「停久了自己收斂」,停在正中間會停在 50/50 的疊影上 —— 所以窗口壓到約 93px 捲動(巡航段最快的一段,兩三格滾輪就過完)。
 - **隧道在 shader 裡**(A5 從 CSS overlay 升級):暖光池(舊 `.tunnel-lift` 的橢圓)與掃光帶(舊 `.tunnel-sweep-band` 的 100° 重複漸層)都算在 grade shader 的末段,牆與立柱**共用同一段程式、不同的 `uLead`** —— 立柱早 0.12 個週期亮起來、多吃 12% 的光池,這就是「掃光沿 z 有先後」。L1 那條「lift/sweep 掃不到立柱(差 ≤ 1.7/255)」的缺陷因此結案(實測立柱在洞中亮 +1.2/255,而車廂壁只 +0.14)。
 - **DOM 疊層 `CabinFrame`**:只有跑馬燈與玻璃反光(A6 要跟滑鼠走 ±3.5px,搬進場景等於每次滑鼠動就要重畫一幀)。**跑馬燈的面板底色不在 DOM**(`.cabin-frame .led { background: transparent }`)——那塊 `#050805` 是牆貼圖裡塗掉烤死字的矩形;DOM 若自己畫一片不透明面板,就會蓋掉場景裡「橫杆壓在跑馬燈前面」的那 8px,深度又反了(L1 的同一個坑)。疊層在 doorP 0.85→1 淡入(相機從 0.85 起靜止,cover 幾何與場景完全一致)。
-- **exit 的交棒**(本階段沿用 CSS 相機):車廂與出站的門是**同一個 canvas**,不能像 DOM 版那樣兩層並存。所以門等 `.camera` 的 opacity 收乾才接手 —— `EXIT_HANDOFF = e 0.72`(= camOpacity 歸零那一點),接手瞬間 `.camera` 的 transform 歸位、`sway` 那層收成 opacity 0(否則跑馬燈會在月台上的門裡復活)。門的淡入因此從 exitDoorP 0.303 起算(舊版 0.18),0.15 內站滿,仍然早於 hero 的 e 0.80。階段 2b 會把整段 exit 收進場景,這個交棒也會消失。
+- **exit 整段在場景裡**(L2b,見下一節)。`.camera` 那一層在 3D 模式下全程 `transform: none / opacity: 1`,CSS 的假 3D 已經刪掉。
+
+### 出站入景(L2b:exit 一鏡到底)
+
+`.camera` 的 CSS 假 3D(rise 的 translateY/scale + 轉身的 rotateY/translateX,含手機的 2.5D 變體)整組**刪掉**。exit 全程由場景那一台 `PerspectiveCamera` 演,分鏡表是 `door3d/scene.ts` 的 `EXIT`,全部由 `e`(exitProgress)插值 —— 沒有時間軸,倒著捲就是門重開、轉回來、坐下去(實測同一個 e 前進 / 後退逐像素相同)。
+
+| e | 這一拍 | 相機 |
+|---|---|---|
+| 0.00–0.10 | 窗景層深度塌陷。**相機完全不動** → 螢幕上一個像素都沒變 | — |
+| 0.06–0.40 | 起身 | y 0 → 0.40,俯角補償 `PITCH_COMP = 0.85` |
+| 0.40–0.48 | 半拍(B4 的節奏常數原樣平移) | 不動 |
+| 0.48–0.66 | 轉身:繞**牆面上的樞紐**公轉,峰值 yaw ≈ 10.3° | 位置 `(R·sinθ, y, CABIN_Z + R·cosθ)`,`rotation.y = θ` |
+| 0.62–0.72 | 轉回:yaw 收乾 | |
+| 0.60–0.82 | 退出:穿過門洞退到月台側的出站構圖(fill 0.70 / 0.82) | z −1.2 → +3.39(1440×900) |
+| 0.72–0.96 | 門由開到關(`EXIT_DOOR`)。相機這時已經在 z > 0,門板才不會從鏡頭身上掃過去 | |
+| 0.80–1.00 | 出站大廳淡入(唯一保留的 DOM 交棒;它自帶不透明底色,而且**是正式的 `.concourse` 本人**) | |
+
+四個「為什麼」,改動前請先讀:
+
+- **為什麼是公轉不是原地 yaw**:繞眼點的旋轉在數學上**零視差**(同一組射線的重投影)。視差要靠平移,所以相機是繞著牆面上的樞紐公轉 —— 順帶保證牆永遠在視野正中,平面佈景不會轉出畫面。樞紐半徑 = ride 機位到牆的距離,所以 θ = 0 時位置與朝向剛好回到 `(0, 0, CAM_Z1)`,**e = 0 不需要任何特例**(實測 p = 0.7999 與 0.8000 逐像素相同)。
+- **yaw 上限是幾何算出來的,不是美感**:牆是一片 z = −8 的平面,半寬只有 cover 的 1.035 倍。公轉 θ 時視錐遠角掃到牆上 `R·sinθ − R·cosθ·tan(θ + hfov)` —— 1440×900 實測 θ = 4° 就要開始過掃描,10° 要 1.02×、15° 要 1.13×、20° 要 1.27×。過掃描 = 車廂照被放大,而放大在螢幕上讀起來就是「鏡頭在推」。`TURN_MAX = 12°`(back 曲線把實際峰值壓到 10.3°)只要 1.02–1.03×,推得出來但讀不出來。
+- **佈景凍結 + 精算過掃描**:exit **不走** cover 重算(`frozen`),佈景就是 ride 那一刻的一組平面,相機一動就有真視差。代價是平面不會自己跟上視錐,所以每幀用四條角射線打到牆/立柱平面上,算出「剛好不露邊」的最小放大倍率 `over`(`coverNeed`)。⚠️ `coverNeed` 用的是**舞台**的視角而不是 canvas 的:canvas 比舞台大 5.5%、相機 zoom 補回去,那一圈本來就在 `overflow: hidden` 外面 —— 把 zoom 算進去會多要 5.5% 的過掃描,e = 0 就不再逐位相同(實測 77.8% 的像素被動到)。
+- **窗景為什麼要先塌陷**:像素窗景必須正對相機(紅線),而且窗景平面是**剛好等於窗洞**的大小 —— 相機一動就會從洞緣露出底色。塌陷 = 把窗景層的 z 推到牆平面(`COLLAPSE_Z`),只動 z、螢幕上的位置與大小完全不變(`k` 會補回來),所以那 10% 相機不動的期間畫面一格都沒變。之後窗景就是牆的一部分:不吃透視、不會露邊,深度全部交給立柱 ↔ 牆那 1.5 m。
+
+**簾幕就是大廳本人**(死區修法):exit 尾段那層淡入的 hero 曾經是 stage 裡一片獨立的疊層(`.concourse-intro`),pin 解除之後才交棒給正式的 `.concourse`。那個交棒有一個**幾何上躲不掉**的缺陷 —— `pinSpacing` 讓 stage 在 pin 結束後還有整整 100vh 要捲走,正式大廳排在那之後,所以 p = 1 時兩個站名牌差了剛好一個視口(1440×900 實測 91 vs 904):捲到旅程盡頭看到的是「hero + 一片空的深色」,還要再空捲約 800px 時刻表才進來。**這正是使用者回報「CONCOURSE hero 出現在第一屏」的那張畫面。**
+現在疊層整個刪掉,改由 `.concourse-overlap` 把正式大廳上拉一個視口、與 stage 的最後一屏完全重疊,淡入曲線(e 0.80→1.00)原樣搬到它身上,另外由 `applyFrame` 給它一個 `translateY(-TOTAL_LEN × (1 - p))` 把它在淡入期間**釘在視口頂端** —— 不釘的話它是一般流元素,那 320px 捲動裡站名牌會一邊淡入一邊往上滑 320px,而舊疊層是釘在 pin 住的 stage 裡的。位移量在 p = 1 剛好歸零,所以 **pin 解除那一刻沒有任何東西換手**:transform 歸零、大廳無縫接回一般流,繼續捲就是繼續讀時刻表。實測(1440×900 / 390×844):淡入期間站名牌螢幕位置的變動 = 0px、解除後每捲 1px 位移 1px(誤差 0)、p = 1 那一幀時刻表標題已經在畫面上(y = 252 / 210)、倒捲逐值相同、文件總高少了一個視口(10084 → 9271)。
+⚠️ 三件事綁在一起,改一個要看另外兩個:① 上拉的單位是 **vh 不是 dvh**(對齊的是 `.stage` 的 `height: 100vh`);② `.concourse-overlap` 要 `position: relative; z-index: 10` 才贏得過 stage(stage 是 z-auto 的**定位**元素,不宣告就會蓋在後面的一般流元素上);③ 淡入途中 `pointer-events: none`,而門檻是 `op > 0.99` 不是 `op >= 1` —— e = 1 時 `(1 - 0.80) / 0.20` 在浮點下是 0.9999999999999998,用 `>= 1` 會讓走到底的大廳永遠不可點。
+
+**DOM 疊層**(`CabinFrame` 的跑馬燈 + 玻璃反光)在 `e 0 → 0.16` 淡出:它們釘在螢幕上,相機一動就跟牆脫節。0.16 是算出來的 —— 俯角補償讓牆在 e = 0.16 時只滑了約 2px。語意上是「到站,車內顯示器熄了」。
 
 ### 降級路徑(no-WebGL,Q3a 降規格凍結)
 
-`createDoorScene` 回 `null`(拿不到 WebGL)或 chunk 載入失敗 → `Door3D` 的 `onStatus(false)` → `ScrollJourney` 掛 `CabinComposite`(**靜默,不顯示任何提示**)。降級版保留內容與識別:車廂 + 立柱層(含 K = 1.7 的視差與 `.cabin-front-tint` 遮罩)+ 三扇單層窗景 + 燈光曲線 + 跑馬燈 + 資訊卡 + 路線圖;**砍掉**隧道(A5)、月台層(B2)、窗景深度層(A3)、門過場(canvas 保持透明 → 直接切換)。兩套 ride 視覺的同步面只剩 cover 幾何常數(`max(100vw, 177.68vh)` 與 `1.0241546`,四處註解互相指向)。
+`createDoorScene` 回 `null`(拿不到 WebGL)或 chunk 載入失敗 → `Door3D` 的 `onStatus(false)` → `ScrollJourney` 掛 `CabinComposite`(**靜默,不顯示任何提示**)。降級版保留內容與識別:車廂 + 立柱層(含 K = 1.7 的視差與 `.cabin-front-tint` 遮罩)+ 三扇單層窗景 + 燈光曲線 + 跑馬燈 + 資訊卡 + 路線圖;**砍掉**隧道(A5)、月台層(B2)、窗景深度層(A3)、門過場(canvas 保持透明 → 直接切換)、出站的門。**exit 退回最單純的一組**:`.camera` 起身(上移 + 微推,e 0→0.40)然後整層淡出(0.48→0.80),黑幕之後 hero 亮起來 —— 刻意不留 rotateY,那正是 L2b 要刪掉的假 3D,而且降級路徑的車廂是一張 DOM 照片,轉起來只會更像紙板。兩套 ride 視覺的同步面只剩 cover 幾何常數(`max(100vw, 177.68vh)` 與 `1.0241546`,四處註解互相指向)。
 
 `gl` 有三態:`pending` 期間(場景在 idle callback 才 boot)先掛 DOM 車廂,任何時刻畫面上都有一個車廂;`ok` 之後整組卸載。
 
@@ -138,7 +167,11 @@ L1 的立柱層知識**只剩降級路徑在用**,但數字仍然是唯一來源
 
 1. **不要用 GSAP ScrollToPlugin。** 它與 pinned + scrub 的 ScrollTrigger 會回饋成死迴圈而凍結整頁。用 `ScrollJourney.tsx` 裡自己寫的 `smoothScrollTo`（逐幀 `window.scrollTo`，會觸發真實 scroll 事件）。
 
-2. **`scrollRestoration` 必須是 `manual`。** pin 建立前文件只有 ~1916px，之後才被撐到 ~9516px。瀏覽器會在那之前就還原捲動位置 → 被 clamp 到出站大廳頂端 → 重整時先閃一下最下方的區塊。已在 pin 的 effect 裡處理，cleanup 會還原原值。
+2. **`scrollRestoration` 必須是 `manual`，而且只能透過 `ScrollTrigger.clearScrollMemory("manual")` 設。** pin 建立前文件只有 ~1.8 屏高，之後才被撐到 `100vh + TOTAL_LEN`。瀏覽器會在那之前就還原捲動位置 → 被 clamp 進出站大廳 → **重整時第一屏是大廳的站名牌（CONCOURSE / NoopyCai）而不是月台**。
+    ⚠️ 直接寫 `history.scrollRestoration = "manual"` **沒有用**：ScrollTrigger 在 module 初始化時就把當下的值快照成 `_scrollRestoration`（`ScrollTrigger.js:2018`，發生在 `registerPlugin` 那一刻，比任何 effect 都早），之後**每次 refresh 都把快照寫回 history**（同檔 452 行的 `_clearScrollMemory`）。refresh 至少會在 ScrollTrigger 建立後與 window `load` 各跑一次 —— 我們寫的 `"manual"` 會在幾百毫秒內被 gsap 改回 `"auto"`（實測穩定重現）。`clearScrollMemory` 會同時更新快照與 history，refresh 之後才留得住；cleanup 也要用它還原原值。
+    ⚠️ 但 `clearScrollMemory` 在 effect 裡跑就是**等 hydration**。瀏覽器的還原發生在解析／版面之後、hydration 之前，dev 的編譯 + hydration 可以是好幾秒 —— 那段時間畫面就停在還原後的位置。所以**第一道防線是 `app/layout.tsx` `<head>` 裡的 inline script**（只有 `history.scrollRestoration = "manual"` 一行）：它比瀏覽器還原早，而且比 `registerPlugin` 早 ⇒ gsap 快照到的就是 `"manual"`，effect 裡的 `clearScrollMemory("manual")` 從此只是補刀。實測 cold load 的**第一幀**就是 `manual`（加這支 script 之前第一幀是 `auto`，要到 hydration 才翻）。那支 script 刻意**不**做 `scrollTo(0, 0)`（歸零是 `ScrollJourney` 的事，見坑 12），多做一次會壓掉 hash 深連結。
+    第三道防線在版面：被 pin 的 `wrap` 帶 `min-height: calc(100vh + TOTAL_LEN px)`，把 pin-spacer 之後才會出現的高度**先用 CSS 佔住**。SSR 的 HTML 到 GSAP 建好 pin 之間（手機冷啟動可以是好幾秒、JS 掛掉就是永遠）出站大廳因此不會貼在第一屏底下。pin 建好之後 spacer 高度剛好等於這個值，min-height 就不再作用（實測 `docH` / `.concourse` 的位置完全沒動）。
+    第四道防線在 CSS:`.concourse` 的 opacity **不給 CSS 初值**(= 1),而且只有 `.concourse-overlap`(有旅程的那一份)會被 `applyFrame` 寫。大廳是這一頁唯一的文字內容,它的可見性不能寄生在 JS 有沒有跑起來 —— 而 `ScrollJourney` 卸載時(reduced-motion 翻旗標、StrictMode/HMR)cleanup 會把那三個 inline style 還原,不然它就永遠停在旅程還沒開始的 `opacity: 0`。
 
 3. **文字不要放進 sway 層。** 那層常駐 `scale(1.035)`（滑鼠視差 ±15px 的過掃描），加上 `will-change` + `preserve-3d`，瀏覽器會整層先光柵化再 GPU 縮放 → 文字與像素字型被重新取樣而**發糊**。照片和 canvas 放大 3.5% 看不出來，文字看得出來。資訊卡與路線圖必須是 `.camera` 的直接子元素。
 
@@ -166,6 +199,10 @@ L1 的立柱層知識**只剩降級路徑在用**,但數字仍然是唯一來源
     正解是**過掃描留在元素上**:`.cabin-canvas` 用 `inset: -1.75%` 讓盒子自己大 3.5%,sway 迴圈只寫位移與旋轉(沒有 scale),相機 `zoom = 1/1.035` 把視野等比放大回來 —— 三者互相抵消,門過場在螢幕上一個像素都沒變(實測 profile 互相關 scale 0.9995–1.0000、位移 ≤ 0.25px),而小字反而比 DOM 版更銳(海報 +2.7%、告示 +2.3%)。改這三個數字之一就要三個一起改。
 
 15. **`Window.tsx` 的 crossfade 舊層移除計時器要掛在 `layers.length` 上,不能掛在 `layers` 上。** raf 把 `on` 改成 true → `layers` 換新陣列 → effect 重跑 → cleanup 先把計時器清掉,而重跑時已經沒有 pending 就直接 return —— 舊層於是永遠留在 DOM。實測 L1 版(當時這還是主路徑)走完六站累積 **17 張 canvas**,每一張的 `useFrame` 每幀都還在 blit。`length` 不會被 `on` 的翻面改動,所以計時器活得下來(修正後穩定在 3 張 + 門的 canvas)。
+
+16. **`.camera` 這一層必須是 `transform-style: flat`,資訊卡與路線圖才不會被斜切。** 它底下的 sway 層帶著滑鼠視差的 `rotateX(±1.1°) rotateY(±1.4°)`;`.camera` 一旦是 `preserve-3d`,sway 那片**傾斜的平面**就和 z = 0 的 `.station-panel` / `.routemap` **在同一個 3D rendering context 裡相交** —— 合成器沿交線把卡片切成兩半,遠的那半畫到車廂照後面。螢幕上讀起來就是「卡片缺了一角/整片不見,而且切線跟著滑鼠跑」(手機也會:觸控拖曳一樣發 `pointermove`)。
+    L1/L2a 時代這個地雷被**意外壓住**:`applyFrame` 全程給 `.camera` 寫 `will-change: transform, opacity`,而 `will-change` 只要列到 grouping property(`opacity`),規格就要求 `preserve-3d` **當成 `flat`**。L2b 把 `.camera` 的 CSS 假 3D 刪掉、`willChange` 改回 `auto`,preserve-3d 才第一次真的生效,地雷就炸了。實測:`will-change: transform`(非 grouping)**修不好**,`transform-style: flat` 才是真正的解 —— 所以不要用 will-change 去壓它,那是把正確性寄生在一個效能提示上。
+    sway 的 rotateX/rotateY 因此**本來就沒有透視**(`.stage` 的 `perspective: 1200px` 只作用到 `.camera`),它一直是仿射的擠壓 —— 這不是這次改壞的,是 L1 以來就這樣。
 
 ## 慣例
 

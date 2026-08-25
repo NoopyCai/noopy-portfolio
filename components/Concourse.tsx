@@ -6,17 +6,16 @@ import type { Bi } from "@/content/i18n";
 import { Icon } from "./Icon";
 import { jumpToStation } from "@/lib/scroll";
 
-// 轉入 intro 與正式 section 共用的 hero,確保 pin 解除瞬間畫面一致(無縫交棒)。
-// primary = 這是頁面正文的那一份,站名牌才是 <h1>。ScrollJourney 的轉場疊層共用同一個
-// 元件,但那份純屬視覺重複 —— 渲染成 <p> 才不會在 exit 相位同時存在兩個 h1。
-export function ConcourseHero({ primary = false }: { primary?: boolean }) {
+// 出站大廳的站名牌。曾經有一個 `primary` 開關,因為 ScrollJourney 的轉場疊層會再渲染
+// 一份(那份要降成 <p> 才不會同時存在兩個 h1)。疊層已經刪掉 —— 大廳自己就是簾幕 ——
+// 所以這裡永遠是全站唯一的 h1。
+export function ConcourseHero() {
   const { t } = useLang();
-  const Name = primary ? "h1" : "p";
   return (
     <div className="concourse-hero">
       {/* CONCOURSE 降為方位小標(站內指示牌的層級),名字才是站名牌 */}
       <p className="eyebrow-sign">CONCOURSE</p>
-      <Name className="h1-sign">NoopyCai</Name>
+      <h1 className="h1-sign">NoopyCai</h1>
       <p className="h1-role">
         {t({ zh: "Software Engineer · 前端 / 全端", en: "Software Engineer · Frontend / Full-stack" })}
       </p>
@@ -60,8 +59,11 @@ function linkifyGithub(text: string, href: string): React.ReactNode {
   );
 }
 
-// 出站大廳:轉身後的正常捲動區(站名牌 + 時刻表 + 關於 + 聯絡 + footer)
-export function Concourse() {
+// 出站大廳:轉身後的正常捲動區(站名牌 + 時刻表 + 關於 + 聯絡 + footer)。
+// overlap = 這一頁有 pin 住的旅程,大廳要**上拉一個視口**與 stage 的最後一屏重疊,
+// 自己當 exit 尾段的簾幕(見 globals.css 的 .concourse-overlap)。reduced-motion 拿到的
+// 是 StaticFallback,沒有 stage 可以重疊 —— 那時上拉會直接吃掉降級版的最後一屏。
+export function Concourse({ overlap = false }: { overlap?: boolean }) {
   const { t } = useLang();
   const terminal = STATIONS[STATIONS.length - 1].panel;
   const github = terminal.contacts?.find((c) => c.label === "GitHub")?.href ?? "https://github.com/NoopyCai";
@@ -81,9 +83,9 @@ export function Concourse() {
   }, []);
 
   return (
-    <section className="concourse" aria-label={t({ zh: "出站大廳", en: "Concourse" })}>
+    <section className={overlap ? "concourse concourse-overlap" : "concourse"} aria-label={t({ zh: "出站大廳", en: "Concourse" })}>
       <div className="concourse-inner">
-        <ConcourseHero primary />
+        <ConcourseHero />
 
         <div className="concourse-block">
           <h2 id="tt-title" className="tt-title">{`◄ ${t({ zh: "本日行駛紀錄", en: "TODAY'S SERVICE" })} DEPARTURES ►`}</h2>

@@ -53,6 +53,14 @@ const FRONT_REL = 1.0241546;
 // 各層的世界 z(相機在 ride 停在 z = -1.2)。距離只決定「哪一層先畫」與 2b 的視差,
 // 螢幕上的大小一律由 cover 重算決定(見檔頭)。
 const Z = { far: -14, near: -11, platform: -9.5, dim: -9, wall: -8, flash: -7.5, front: -6.5 } as const;
+// L2b:exit 相機真的會動,scene.ts 要算「這一幀的視錐有沒有超出各層」——
+// 牆與立柱是唯二會被看到邊緣的層(其餘都躲在窗洞裡),所以只有這兩個常數要外露。
+export const Z_WALL = Z.wall;
+export const Z_FRONT = Z.front;
+export { FRONT_REL };
+// 窗景層塌陷的目的地:貼在牆後 2 cm。**不是 0** —— 留一點才保證窗洞永遠切得到它
+// (k 比牆大 0.3%),而 2 cm 在 1.2 m 的橫移下只會產生 0.004 m 的偏移(次像素)。
+const COLLAPSE_Z = Z.wall - 0.02;
 // 畫序(three 先畫不透明再畫透明,透明內部依 renderOrder → 距離排序)。
 // 順序照抄 DOM 的節點順序:窗景 → 月台 → 隧道壓暗 →(牆)→ 出洞回光 → 立柱。
 const ORDER = { far: -60, near: -59, platform: -58, dim: -57, wall: -50, flash: -45, front: -40 } as const;
@@ -151,6 +159,8 @@ type Slot = {
   mat: MeshBasicMaterial;
   key: string;
   factor: number;
+  /** 這一層「原本」的世界 z。exit 的塌陷會把它往牆平面推,所以不能直接讀 mesh.position.z */
+  z: number;
   layer?: SceneLayerKind;
 };
 type Win = {
@@ -169,7 +179,20 @@ type Win = {
 
 export type Cabin = {
   /** 每幀:依 wall 層的 cover 幾何(scene.ts 算好)擺好所有層,再套上這一幀的連續量 */
-  update(p: { camY: number; dist: number; ph: number; cy: number; frame: Frame; visible: boolean }): void;
+  update(p: {
+    camY: number;
+    dist: number;
+    ph: number;
+    cy: number;
+    frame: Frame;
+    visible: boolean;
+    /** L2b:整組佈景的過掃描倍率。ride/enter 恆 1;exit 由 scene.ts 依相機實際視錐算出
+     *  「剛好不露邊」的最小值(繞著 (0, 0) 等比放大,所以層與層的相對關係不變)。 */
+    over?: number;
+    /** L2b:窗景層的深度塌陷 0→1。1 = 三扇窗的內容全部貼到牆平面上 ——
+     *  轉身時像素窗景就不會吃到透視、也不會從窗洞邊緣露出底色(見 scene.ts 的分鏡表)。 */
+    collapse?: number;
+  }): void;
 };
 
 const parsePos = (pos: string) => {
@@ -332,7 +355,7 @@ export function createCabin(scene: Scene, onReady: () => void): Cabin {
     mesh.renderOrder = order;
     mesh.visible = false;
     scene.add(mesh);
-    return { mesh, mat, key: "", factor, layer };
+    return { mesh, mat, key: "", factor, z, layer };
   };
 
   const wins: Win[] = WIN.map((rect, i) => {
@@ -407,7 +430,7 @@ export function createCabin(scene: Scene, onReady: () => void): Cabin {
   const tintBuf = [0, 0, 0, 0];
 
   return {
-    update({ camY, dist, ph, cy, frame, visible }) {
+    update({ camY, dist, ph, cy, frame, visible, over = 1, collapse = 0 }) {
       wall.visible = visible && wallMat.uniforms.map.value !== null;
       front.visible = visible && frontMat.uniforms.map.value !== null;
       if (!visible) {
@@ -422,14 +445,20 @@ export function createCabin(scene: Scene, onReady: () => void): Cabin {
       // ── 各層的 cover 幾何:wall 那一層由 scene.ts 給,其餘按距離比例縮放 ──────
       // 一個在 wall 平面上的點 (x, y) 投影到距離 dist2 的平面上就是 (x·k, camY + (y−camY)·k)。
       const pw = ph * CABIN_ASPECT;
-      const place = (m: Mesh, sx: number, sy: number, cx: number, cyy: number) => {
-        const k = (dist - (m.position.z - Z.wall)) / dist; // 該層距離 ÷ 牆距離
-        m.position.set(cx * k, camY + (cyy - camY) * k, m.position.z);
+      // over 同時乘在「大小」與「中心位移」上 = 整組佈景繞著 (0, camY) 等比放大。
+      // ride 的 camY / cy 都是 0,exit 傳進來的是**凍結的** ride 值(同樣是 0),
+      // 所以放大中心永遠是畫面正中 —— 層與層的相對位置不會因為過掃描而歪掉。
+      const place = (m: Mesh, sx: number, sy: number, cx: number, cyy: number, z: number) => {
+        const k = ((dist - (z - Z.wall)) / dist) * over; // 該層距離 ÷ 牆距離,再乘過掃描
+        m.position.set(cx * k, camY + (cyy - camY) * k, z);
         m.scale.set(sx * k, sy * k, 1);
       };
-      place(wall, pw, ph, 0, cy);
-      place(front, pw * FRONT_REL, ph * FRONT_REL, 0, cy);
-      place(flash, pw, ph, 0, cy);
+      // 窗景層的塌陷:z 往牆平面收。**只動 z**,螢幕上的位置與大小完全不變(k 會跟著補回來)
+      // —— 所以 e = 0 那一刻塌不塌陷畫面一模一樣,相機一動才看得出深度沒了。
+      const winZ = (z: number) => z + (COLLAPSE_Z - z) * collapse;
+      place(wall, pw, ph, 0, cy, Z.wall);
+      place(front, pw * FRONT_REL, ph * FRONT_REL, 0, cy, Z.front);
+      place(flash, pw, ph, 0, cy, Z.flash);
 
       // ── 燈光曲線 → shader uniform ─────────────────────────────────────────
       const g = frame.grade;
@@ -464,12 +493,12 @@ export function createCabin(scene: Scene, onReady: () => void): Cabin {
           // 少兩個 draw call,而且與 DOM 版一致 —— 那邊 crossfade 走完會把舊層卸載。
           fill(w.a[j], w, i, frame.sceneA, frame.mix >= 1 ? 0 : 1, pan);
           fill(w.b[j], w, i, frame.sceneB, frame.mix, pan);
-          place(w.a[j].mesh, sw, sh, cx, cyw);
-          place(w.b[j].mesh, sw, sh, cx, cyw);
+          place(w.a[j].mesh, sw, sh, cx, cyw, winZ(w.a[j].z));
+          place(w.b[j].mesh, sw, sh, cx, cyw, winZ(w.b[j].z));
         }
         // B2 月台層:pan 與主窗景同源,B1 的減速曲線因此免費繼承
         fill(w.platform, w, i, "platform", frame.platform, pan);
-        place(w.platform.mesh, sw, sh, cx, cyw);
+        place(w.platform.mesh, sw, sh, cx, cyw, winZ(w.platform.z));
         // A5 壓暗 + 洞口暗帶(暗帶只給中央窗)
         const dimV = tun ? tun.dim : 0;
         const band = i === 0 && tun ? tun.band : null;
@@ -477,7 +506,7 @@ export function createCabin(scene: Scene, onReady: () => void): Cabin {
         if (w.dim.visible) {
           w.dimMat.uniforms.uDim.value = dimV;
           w.dimMat.uniforms.uBand.value = band === null ? -999 : band;
-          place(w.dim, sw, sh, cx, cyw);
+          place(w.dim, sw, sh, cx, cyw, winZ(Z.dim));
         }
       }
     },
