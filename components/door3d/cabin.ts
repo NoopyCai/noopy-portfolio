@@ -52,7 +52,7 @@ const FRONT_REL = 1.0241546;
 
 // 各層的世界 z(相機在 ride 停在 z = -1.2)。距離只決定「哪一層先畫」與 2b 的視差,
 // 螢幕上的大小一律由 cover 重算決定(見檔頭)。
-const Z = { far: -14, near: -11, platform: -9.5, dim: -9, wall: -8, flash: -7.5, front: -6.5 } as const;
+const Z = { far: -14, near: -11, platform: -9.5, dim: -9, reflect: -8.5, wall: -8, flash: -7.5, front: -6.5 } as const;
 // L2b:exit 相機真的會動,scene.ts 要算「這一幀的視錐有沒有超出各層」——
 // 牆與立柱是唯二會被看到邊緣的層(其餘都躲在窗洞裡),所以只有這兩個常數要外露。
 export const Z_WALL = Z.wall;
@@ -63,7 +63,7 @@ export { FRONT_REL };
 const COLLAPSE_Z = Z.wall - 0.02;
 // 畫序(three 先畫不透明再畫透明,透明內部依 renderOrder → 距離排序)。
 // 順序照抄 DOM 的節點順序:窗景 → 月台 → 隧道壓暗 →(牆)→ 出洞回光 → 立柱。
-const ORDER = { far: -60, near: -59, platform: -58, dim: -57, wall: -50, flash: -45, front: -40 } as const;
+const ORDER = { far: -60, near: -59, platform: -58, dim: -57, reflect: -56, wall: -50, flash: -45, front: -40 } as const;
 
 const LED_BLANK = "#050805";
 
@@ -262,6 +262,19 @@ export function createCabin(scene: Scene, onReady: () => void): Cabin {
   flash.visible = false;
   scene.add(flash);
 
+  // 玻璃倒影(隧道段):窗外一暗,玻璃浮出車廂內部的鏡像。刻意不吃 grade shader ——
+  // 倒影本來就該比實景灰,用 material.color 固定壓暗(basic material 的 color 是乘法)。
+  const K_REFLECT = 0.22; // 「看得見但要注意才發現」;驗收時現場調
+  const reflectMat = new MeshBasicMaterial({
+    transparent: true, depthWrite: false, fog: false, opacity: 0, toneMapped: false,
+    color: 0x9fb0c8, // 冷灰藍:夜間玻璃反射偏冷
+  });
+  const reflect = new Mesh(QUAD, reflectMat);
+  reflect.position.z = Z.reflect;
+  reflect.renderOrder = ORDER.reflect;
+  reflect.visible = false;
+  scene.add(reflect);
+
   // cabin.jpg → 挖洞 + LED 塗黑。LED 那塊照片裡烤死了一組跑馬燈文字,而 DOM 的即時
   // 跑馬燈就疊在同一個位置(CabinFrame):底色留在場景裡、只有會發光的字是 DOM,
   // 兩邊的深度關係才不會反過來(橫杆必須壓在跑馬燈面板前面,見 CabinComposite 的註解)。
@@ -294,6 +307,15 @@ export function createCabin(scene: Scene, onReady: () => void): Cabin {
     t.minFilter = LinearMipmapLinearFilter;
     wallMat.uniforms.map.value = t;
     wall.visible = true;
+
+    // 倒影共用牆貼圖(挖好洞、塗掉 LED 的那張):鏡像後窗洞區是透明 → 底下的壓暗
+    // 透出來,讀起來就是「對面窗外是黑的」,物理上剛好正確。
+    const rt = t.clone();
+    rt.repeat.x = -1;
+    rt.offset.x = 1;
+    reflectMat.map = rt;
+    reflectMat.needsUpdate = true;
+
     onReady();
   });
 
@@ -439,6 +461,7 @@ export function createCabin(scene: Scene, onReady: () => void): Cabin {
           w.dim.visible = false;
         }
         flash.visible = false;
+        reflect.visible = false;
         return;
       }
 
@@ -480,6 +503,15 @@ export function createCabin(scene: Scene, onReady: () => void): Cabin {
       flashMat.opacity = tun ? tun.flash : 0;
       flash.visible = flashMat.opacity > 0.001;
 
+      // 玻璃倒影:只在隧道內存在。opacity 為 0 時 three 仍會發 draw call,
+      // 所以用 visible 切 —— 這一行是 P4(draw call 預算)的必要條件。
+      const dimNow = tun ? tun.dim : 0;
+      reflect.visible = reflectMat.map !== null && dimNow > 0.01;
+      if (reflect.visible) {
+        reflectMat.opacity = dimNow * K_REFLECT;
+        place(reflect, pw, ph, 0, cy, Z.reflect);
+      }
+
       // ── 三扇窗 ────────────────────────────────────────────────────────────
       const pan = frame.x;
       for (let i = 0; i < wins.length; i++) {
@@ -500,11 +532,10 @@ export function createCabin(scene: Scene, onReady: () => void): Cabin {
         fill(w.platform, w, i, "platform", frame.platform, pan);
         place(w.platform.mesh, sw, sh, cx, cyw, winZ(w.platform.z));
         // A5 壓暗 + 洞口暗帶(暗帶只給中央窗)
-        const dimV = tun ? tun.dim : 0;
         const band = i === 0 && tun ? tun.band : null;
-        w.dim.visible = dimV > 0.001 || band !== null;
+        w.dim.visible = dimNow > 0.001 || band !== null;
         if (w.dim.visible) {
-          w.dimMat.uniforms.uDim.value = dimV;
+          w.dimMat.uniforms.uDim.value = dimNow;
           w.dimMat.uniforms.uBand.value = band === null ? -999 : band;
           place(w.dim, sw, sh, cx, cyw, winZ(Z.dim));
         }
