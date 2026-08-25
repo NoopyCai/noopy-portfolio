@@ -1,0 +1,21 @@
+<!doctype html><meta charset="utf-8">
+<style>
+  @font-face { font-family: "Departure Mono"; src: url("../../public/fonts/DepartureMono-Regular.woff2") format("woff2"); }
+  html, body { margin: 0; }
+  body { width: 1200px; height: 630px; background: #070b12; overflow: hidden;
+         display: grid; place-items: center; font-family: "Departure Mono", monospace; }
+  .frame { text-align: center; }
+  .line-top { color: #8b98ad; font-size: 26px; letter-spacing: .35em; }
+  .name { color: #f2c230; font-size: 128px; margin: 28px 0 20px;
+          text-shadow: 0 0 22px rgba(242, 194, 48, .55), 0 0 60px rgba(242, 194, 48, .25); }
+  .role { color: #06ff31; font-size: 30px; letter-spacing: .22em;
+          text-shadow: 0 0 14px rgba(6, 255, 49, .45); }
+  .rail { position: absolute; left: 0; right: 0; height: 2px; background: rgba(139, 152, 173, .18); }
+  .rail.t { top: 96px; } .rail.b { bottom: 96px; }
+</style>
+<div class="rail t"></div><div class="rail b"></div>
+<div class="frame">
+  <div class="line-top">◄ 夜車・區間 NIGHT LOCAL ►</div>
+  <div class="name">NoopyCai</div>
+  <div class="role">SOFTWARE ENGINEER · FRONTEND / FULL-STACK</div>
+</div>

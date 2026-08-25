@@ -6,7 +6,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "vitest run"
+    "test": "vitest run",
+    "og": "bash scripts/og/generate.sh"
   },
   "dependencies": {
     "gsap": "^3.12.5",

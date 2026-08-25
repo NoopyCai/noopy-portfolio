@@ -20,8 +20,9 @@ export const metadata: Metadata = {
     description: "台鐵夜車主題作品集 · Night-train themed portfolio",
     type: "website",
     locale: "zh_TW",
+    images: [{ url: "/og.png", width: 1200, height: 630, alt: "夜車・區間 · NoopyCai · Software Engineer" }],
   },
-  twitter: { card: "summary_large_image", title: "蔡守傑 NoopyCai · 夜車・區間" },
+  twitter: { card: "summary_large_image", title: "蔡守傑 NoopyCai · 夜車・區間", images: ["/og.png"] },
 };
 
 // 結構化資料。h1 只顯示「NoopyCai」,中文全名的可搜尋性就靠這裡 + metadata + 關於我內文
