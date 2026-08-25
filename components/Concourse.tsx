@@ -152,12 +152,27 @@ export function Concourse({ overlap = false }: { overlap?: boolean }) {
                 {c.label} <Icon name="external" />
               </a>
             ))}
-            {terminal.link && (
-              <a className="concourse-link" href={terminal.link} target="_blank" rel="noopener">
-                {t({ zh: "履歷 PDF", en: "Résumé PDF" })} <Icon name="play" />
-              </a>
-            )}
           </div>
+          {/* 履歷入口:台鐵名片式車票(擬真 + 一點玩味)。整張是一個 <a>,
+              點了在新分頁開 PDF —— 不加 download,讓瀏覽器自己決定內開或下載。 */}
+          {terminal.link && (
+            <a className="ticket" href={terminal.link} target="_blank" rel="noopener">
+              <span className="ticket-head">
+                <span>{t({ zh: "區間 LOCAL", en: "LOCAL" })}</span>
+                <span className="ticket-no">NO. 2026-0001</span>
+              </span>
+              <span className="ticket-route">
+                {t({ zh: "求職中", en: "Job Hunting" })}
+                <span className="ticket-arrow">►</span>
+                {t({ zh: "貴公司", en: "Your Company" })}
+              </span>
+              <span className="ticket-meta">
+                <span>2026.--.--</span>
+                <span>{t({ zh: "票價 · 面談後議", en: "Fare · negotiable" })}</span>
+              </span>
+              <span className="ticket-note">{t({ zh: "憑本票下載履歷 PDF", en: "Valid for one résumé PDF" })}</span>
+            </a>
+          )}
         </div>
 
         <footer className="concourse-footer">

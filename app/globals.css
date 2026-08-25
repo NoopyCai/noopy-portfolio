@@ -293,6 +293,27 @@ a { color: var(--green); }
 .concourse-links { display: flex; flex-wrap: wrap; gap: 12px; }
 .concourse-link { font-family: var(--font-led); font-size: 14px; color: var(--text); text-decoration: none; border: 1px solid rgba(110, 180, 63, .4); border-radius: 999px; padding: 9px 16px; transition: border-color .2s, color .2s, box-shadow .2s; }
 .concourse-link:hover { border-color: var(--green); color: var(--green); box-shadow: 0 0 12px rgba(6, 255, 49, .25); }
+
+/* ── 車票履歷:台鐵名片式車票。虛線裁切邊與紋理全 CSS,不引資產 ── */
+.ticket { display: block; width: min(420px, 100%); margin-top: 18px; padding: 14px 18px 12px;
+  color: var(--text); text-decoration: none; border: 1px solid rgba(159, 176, 200, .35);
+  border-radius: 6px; background:
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, .015) 0 2px, transparent 2px 4px),
+    rgba(20, 27, 38, .92);
+  transition: border-color .2s, box-shadow .2s, transform .2s; }
+.ticket:hover { border-color: var(--amber); box-shadow: 0 0 16px rgba(255, 176, 46, .18); transform: rotate(0.4deg); }
+.ticket:focus-visible { outline: 2px solid var(--green); outline-offset: 3px; }
+.ticket-head { display: flex; justify-content: space-between; font-family: var(--font-led);
+  font-size: 11px; letter-spacing: .18em; color: var(--muted);
+  border-bottom: 1px dashed rgba(159, 176, 200, .3); padding-bottom: 8px; }
+.ticket-route { display: flex; align-items: baseline; gap: 14px; font-size: 22px; padding: 12px 0 10px; }
+.ticket-arrow { color: var(--amber); font-family: var(--font-led); font-size: 14px; }
+.ticket-meta { display: flex; justify-content: space-between; font-family: var(--font-led);
+  font-size: 12px; letter-spacing: .08em; color: var(--muted); }
+.ticket-note { display: block; margin-top: 8px; font-size: 12px; color: var(--amber); }
+@media (prefers-reduced-motion: reduce) { .ticket { transition: none; } .ticket:hover { transform: none; } }
+@media (max-width: 640px) { .ticket-route { font-size: 18px; } }
+
 .concourse-footer { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; border-top: 1px solid var(--line); padding-top: 20px; color: var(--muted); font-family: var(--font-led); font-size: 12px; }
 
 /* 站點資訊面板內部排版(桌機基準;手機在下方 RWD 區重排) */
