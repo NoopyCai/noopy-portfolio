@@ -231,6 +231,22 @@ a { color: var(--green); }
 /* 門開完就收起來:元素留在 DOM(WebGL context 不能反覆建/毀),但不佔合成層 */
 .door-canvas-idle { display: none; }
 
+/* ── gate 月台氛圍。亮度紅線(WCAG 2.3.1):微顫 6.5s 一週期(~0.15Hz)、峰值 0.02,
+   遠低於 3Hz / 10% 的危險門檻;亮帶是移動不是閃爍。 ── */
+.gate-ambience { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 1; }
+.gate-lamp { position: absolute; inset: 0; opacity: 0;
+  background: radial-gradient(ellipse 70% 45% at 50% 6%, rgba(255, 190, 120, .5), transparent 70%);
+  animation: gate-lamp 6.5s ease-in-out infinite; }
+@keyframes gate-lamp { 0%, 100% { opacity: 0; } 50% { opacity: .02; } }
+/* 對向列車:10s 一班,亮帶 1.2s 掃過(12% of 10s),其餘時間停在畫面外 */
+.gate-pass { position: absolute; top: 14%; bottom: 34%; left: 0; width: 18vw;
+  background: linear-gradient(90deg, transparent, rgba(160, 190, 230, .10) 35%, rgba(220, 235, 255, .16) 50%, rgba(160, 190, 230, .10) 65%, transparent);
+  transform: translateX(-20vw);
+  animation: gate-pass 10s linear infinite; }
+@keyframes gate-pass { 0% { transform: translateX(-20vw); } 12% { transform: translateX(120vw); } 100% { transform: translateX(120vw); } }
+@media (max-aspect-ratio: 4/5) { .gate-pass { width: 30vw; } } /* 直式手機 18vw 太細讀不到 */
+@media (prefers-reduced-motion: reduce) { .gate-lamp, .gate-pass { animation: none; } }
+
 /* Start ride 按鈕(z-index 要壓過 .camera —— 它是 z-auto 的定位元素) */
 .start { position: relative; z-index: 8; font-family: var(--font-led); font-size: clamp(20px, 3vw, 34px); letter-spacing: .14em; color: var(--green); background: none; border: none; cursor: pointer; text-shadow: 0 0 12px rgba(6, 255, 49, .9), 0 0 30px rgba(6, 255, 49, .5); animation: pulse 2.2s ease-in-out infinite; }
 .start:active { transform: translateY(1px); }

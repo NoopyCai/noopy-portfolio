@@ -470,20 +470,29 @@ export function ScrollJourney() {
         style={{ position: "relative", height: "100vh", width: "100%", overflow: "hidden", display: "grid", placeItems: "center", background: "var(--bg)", perspective: "1200px", perspectiveOrigin: "center" }}
       >
         {d.phase === "gate" && (
-          <button
-            ref={gateBtn}
-            className="start"
-            onClick={() => {
-              startSoundtrack(); // 使用者手勢啟動,不是 autoplay
-              const w = wrap.current!;
-              // 捲過整段開門,停在第一站(月台)。時長與「多少時間分給門」都是 lib/scroll.ts
-              // 的具名常數(GATE_RIDE_MS / GATE_SPLIT_T),要再調快慢改那裡就好。
-              smoothScrollTo(w.offsetTop + TOTAL_LEN * GATE_RIDE_P, GATE_RIDE_MS, gateRideEase);
-            }}
-          >
-            {/* 與 LED 跑馬燈同一套箭頭字元:同樣吃 --font-led 與綠色光暈(不用 icon 就是為了發光) */}
-            {`${t({ zh: "開始乘車", en: "Start ride" })} ►`}
-          </button>
+          <>
+            {/* 月台等車的氛圍:頂棚燈微顫 + 對向列車每 ~10s 掠過一道亮帶。
+                全部 CSS animation(compositor),離開 gate 相位節點整組消失 = 動畫停。
+                月台本身不動 —— 你站著等車,動的是對面軌道的車。 */}
+            <div className="gate-ambience" aria-hidden>
+              <div className="gate-lamp" />
+              <div className="gate-pass" />
+            </div>
+            <button
+              ref={gateBtn}
+              className="start"
+              onClick={() => {
+                startSoundtrack(); // 使用者手勢啟動,不是 autoplay
+                const w = wrap.current!;
+                // 捲過整段開門,停在第一站(月台)。時長與「多少時間分給門」都是 lib/scroll.ts
+                // 的具名常數(GATE_RIDE_MS / GATE_SPLIT_T),要再調快慢改那裡就好。
+                smoothScrollTo(w.offsetTop + TOTAL_LEN * GATE_RIDE_P, GATE_RIDE_MS, gateRideEase);
+              }}
+            >
+              {/* 與 LED 跑馬燈同一套箭頭字元:同樣吃 --font-led 與綠色光暈(不用 icon 就是為了發光) */}
+              {`${t({ zh: "開始乘車", en: "Start ride" })} ►`}
+            </button>
+          </>
         )}
         {/* .camera 從 gate 相位就掛著:車門過場的 canvas 現在住在它底下的 sway 層裡
             (見下面),而 canvas 一輩子只能有一個、永不卸載(坑 10)。gate 期間這一層
