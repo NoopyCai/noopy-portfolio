@@ -1,4 +1,5 @@
 "use client";
+import { useEffect } from "react";
 import { WIN, LED_RECT } from "@/lib/progress";
 import { LedSign } from "./LedSign";
 
@@ -21,6 +22,24 @@ export function CabinFrame({
   rootRef: React.RefObject<HTMLDivElement | null>;
   ledText: string;
 }) {
+  // LED 時鐘:30 秒直寫三份 .led-clock 的 textContent —— 不走 setState,跑馬燈的
+  // CSS 動畫不重啟、React 零 re-render。分頁掛起時 interval 停,回來立即重寫一次
+  // (interval 恢復後只會從下一個 30s 開始,不重寫的話會顯示掛起前的舊時間)。
+  useEffect(() => {
+    const write = () => {
+      const s = new Date().toTimeString().slice(0, 5);
+      for (const el of document.querySelectorAll<HTMLElement>(".cabin-frame .led-clock")) el.textContent = s;
+    };
+    write();
+    let id = window.setInterval(write, 30_000);
+    const onVis = () => {
+      clearInterval(id);
+      if (!document.hidden) { write(); id = window.setInterval(write, 30_000); }
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => { clearInterval(id); document.removeEventListener("visibilitychange", onVis); };
+  }, []);
+
   return (
     <div className="cabin-frame" ref={rootRef} style={{ opacity: 0 }}>
       {WIN.map((r, i) => (
@@ -40,7 +59,7 @@ export function CabinFrame({
         </div>
       ))}
       <div style={{ position: "absolute", left: `${LED_RECT.left}%`, top: `${LED_RECT.top}%`, width: `${LED_RECT.w}%`, height: `${LED_RECT.h}%` }}>
-        <LedSign text={ledText} />
+        <LedSign text={ledText} clock />
       </div>
     </div>
   );
