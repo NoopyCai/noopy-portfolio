@@ -36,6 +36,9 @@ export type PanelData = {
   // 專案畫面截圖,只出現在「看細節」modal 的最上面(圖先給第一印象)。alt 要描述
   // 畫面內容而不是「專案截圖」——螢幕閱讀器使用者要的是資訊,不是檔名。
   screenshot?: { src: string; alt: Bi };
+  // 系統架構圖(路線圖視覺語言,SVG)。只活在「看細節」modal 與 StaticFallback ——
+  // 文字永不進 WebGL(既有紅線)。alt 要能讓螢幕閱讀器使用者讀懂資料流。
+  diagram?: { src: string; alt: Bi };
 };
 export type Station = {
   id: StationId;
@@ -110,7 +113,7 @@ export const STATIONS: Station[] = [
         en: "Top-sellers and I2I implicit matrix factorization modelled on BigQuery ML, served through an automated Cloud Pub/Sub → BigQuery → Redis pipeline behind a real-time API.",
       },
       tags: ["BigQuery ML", "GCP", "Node.js", "Redis", "Pub/Sub", "SGTM"],
-      year: "2024", // TODO: 確認實際年份
+      year: "2025",
       role: { zh: "獨立開發", en: "Solo build" },
       impact: { zh: "3 種推薦策略 × 即時個人化,訂單分析到上線一條龍", en: "3 strategies × real-time personalization, analytics-to-serving end to end" },
       // TODO: 有可公開的成效數字(如點擊率/轉換提升)時,補進 impact 更有力
@@ -120,6 +123,13 @@ export const STATIONS: Station[] = [
         alt: {
           zh: "電商商品頁的「你可能會喜歡」推薦區塊:一整列六張沙發商品卡,每張有商品名稱、折後價與被劃掉的原價。",
           en: "An e-commerce page's 'You may also like' row: six sofa recommendation cards, each with a product name, a discounted price, and the struck-through original price.",
+        },
+      },
+      diagram: {
+        src: "/diagrams/recommendation.svg",
+        alt: {
+          zh: "架構圖:訂單事件經 Cloud Pub/Sub 進 BigQuery,由 BigQuery ML 訓練熱銷與 I2I 相似商品模型,結果快取進 Redis,供 Node.js 推薦 API 即時服務商品頁。",
+          en: "Architecture diagram: order events flow through Cloud Pub/Sub into BigQuery, BigQuery ML trains top-seller and I2I similarity models, results cache in Redis, and a Node.js API serves the storefront in real time.",
         },
       },
       detail: {
@@ -147,7 +157,7 @@ export const STATIONS: Station[] = [
         en: "Wired LIFF / Messaging API into the Magento2 member system, with AES-256 timed tokens plus Email OTP for login and a dedicated sales-rep QR invite funnel.",
       },
       tags: ["Vue3", "Vite", "LINE LIFF", "GCF", "Redis", "MySQL", "GTM"],
-      year: "2024", // TODO: 確認實際年份
+      year: "2025",
       role: { zh: "獨立開發", en: "Solo build" },
       impact: { zh: "社群帳號 × 電商會員無縫綁定,一鍵時效自動登入", en: "Seamless LINE↔member binding with one-tap timed auto-login" },
       // links: [{ label: "Demo", href: "…" }],  // TODO: 有可公開連結再補
@@ -156,6 +166,13 @@ export const STATIONS: Station[] = [
         alt: {
           zh: "LINE LIFF 綁定完成畫面:綠色勾選圖示下方寫著「已綁定 · 您已是綁定會員」,再下面提示可以關閉此頁面,左右兩側是品牌吉祥物插畫。",
           en: "The LINE LIFF binding success screen: a green check mark above '已綁定' (linked) and a note that the page can now be closed, flanked by brand mascot illustrations.",
+        },
+      },
+      diagram: {
+        src: "/diagrams/line-liff.svg",
+        alt: {
+          zh: "架構圖:LINE App 使用者進入 LIFF(Vue3+Vite)SPA,經 GCF Serverless API 存取 Redis 與 MySQL 的 Token / 綁定資料,再串接 Magento2 會員系統;登入以 AES-256 時效 Token 加 Email OTP 驗證,另有業務員 QR 邀請支線完成歸戶。",
+          en: "Architecture diagram: a LINE user opens the LIFF (Vue3+Vite) SPA, which calls a GCF serverless API backed by Redis and MySQL for tokens and binding data, wired into the Magento2 member system; login uses AES-256 timed tokens plus Email OTP, with a sales-rep QR invite branch for account binding.",
         },
       },
       detail: {
@@ -184,7 +201,7 @@ export const STATIONS: Station[] = [
         en: "The weekly report has Gemini summarize RSS into a PDF pushed to Google Chat; the blog tool does Doc→HTML and image ALT generation; the catalog exports JSONL for retrieval.",
       },
       tags: ["Claude Code", "Gemini", "Node.js", "GCP", "SDD"],
-      year: "2025", // TODO: 確認實際年份
+      year: "2026",
       role: { zh: "獨立開發", en: "Solo build" },
       impact: { zh: "把 AI 導入工作流,內容產製省約 8 成手刻時間", en: "Brought AI into the workflow, ~80% less hand-coding" },
       screenshot: {
@@ -192,6 +209,13 @@ export const STATIONS: Station[] = [
         alt: {
           zh: "AI News Hub 內部工具的登入頁:左半是讀報吉祥物插畫,右半是「使用 Google 帳號登入」按鈕,下方註明僅限公司網域帳號。",
           en: "The AI News Hub internal tool sign-in page: a newspaper-reading mascot illustration on the left, a 'Sign in with Google' button on the right, restricted to company-domain accounts.",
+        },
+      },
+      diagram: {
+        src: "/diagrams/ai-tools.svg",
+        alt: {
+          zh: "架構圖:以公司 Google 網域帳號登入後分三條支線。週報由 Cloud Scheduler 排程抓 RSS,經 Gemini 摘要產 PDF 推送 Google Chat;Blog 支線把 Google Doc 轉 HTML 並生成圖片 ALT 後上稿;商品支線將商品資料匯出 JSONL 供檢索。",
+          en: "Architecture diagram: after signing in with a company Google account, three branches run. A weekly report has Cloud Scheduler pull RSS, Gemini summarize it into a PDF pushed to Google Chat; a blog branch converts Google Docs to HTML with generated image ALT text before publishing; and a catalog branch exports product data as JSONL for retrieval.",
         },
       },
       detail: {

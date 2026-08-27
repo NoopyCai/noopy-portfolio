@@ -206,6 +206,9 @@ a { color: var(--green); }
 .detail-close:hover { color: var(--green); }
 /* 專案截圖:modal 最上面的第一印象。圓角吃卡片級(16px),邊框用髮絲線收邊 */
 .detail-shot { display: block; width: 100%; height: auto; margin: 0 0 18px; border: 1px solid var(--line); border-radius: 16px; background: rgba(255, 255, 255, .03); }
+/* 架構圖:圖本身可能寬於窄幅 modal,捲動限制在自己的容器裡,頁面本體不橫捲 */
+.detail-diagram { margin-top: 18px; overflow-x: auto; }
+.detail-diagram img { display: block; width: 100%; min-width: 480px; height: auto; }
 .detail-row { margin: 12px 0; }
 .detail-row .detail-label { font-family: var(--font-led); font-size: 11px; letter-spacing: .16em; color: var(--emu-green); margin-bottom: 4px; }
 .detail-row p { margin: 0; line-height: 1.75; font-size: 14.5px; }

@@ -23,6 +23,9 @@ export function StaticFallback() {
             <h3 style={{ margin: "6px 0 10px", fontSize: "clamp(22px,4vw,32px)" }}>{t(p.title)}</h3>
             {p.subtitle && <div style={{ color: "var(--muted)", fontFamily: "var(--font-led)", marginBottom: 10 }}>{t(p.subtitle)}</div>}
             {p.body && <p style={{ lineHeight: 1.8 }}>{t(p.body)}</p>}
+            {p.diagram && (
+              <p><img src={p.diagram.src} alt={t(p.diagram.alt)} loading="lazy" style={{ maxWidth: "100%", height: "auto" }} /></p>
+            )}
             {p.tags && (
               <p style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 {p.tags.map((x) => (

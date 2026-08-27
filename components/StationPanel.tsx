@@ -103,6 +103,12 @@ export function StationPanel({ station, visible }: { station: Station; visible: 
                 <p>{t(val)}</p>
               </div>
             ))}
+            {p.diagram && (
+              <div className="detail-diagram">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={p.diagram.src} alt={t(p.diagram.alt)} loading="lazy" />
+              </div>
+            )}
             {p.tags && (
               <div className="sp-tags" style={{ marginTop: 14 }}>
                 {p.tags.map((x) => (

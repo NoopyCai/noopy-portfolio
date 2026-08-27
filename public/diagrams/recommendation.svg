@@ -1,0 +1,80 @@
+<svg viewBox="0 0 720 405" xmlns="http://www.w3.org/2000/svg">
+<!-- 電商推薦系統:路線圖視覺語言,節點=服務、線=資料流。手寫 SVG,無外部工具匯出。 -->
+<style>
+.lnA{stroke:#f2c230;stroke-width:4;fill:none;stroke-linecap:round}
+.dot{fill:#f2c230}
+.node{fill:rgba(15,22,34,.92);stroke:#8b98ad;stroke-opacity:.4;stroke-width:1.5}
+.zh{font-family:-apple-system,"PingFang TC",sans-serif;fill:#e9eff8;text-anchor:middle}
+.mono{font-family:"Departure Mono",ui-monospace,monospace;fill:#e9eff8;text-anchor:middle}
+.arrow{font-family:"Departure Mono",ui-monospace,monospace;fill:#f2c230;text-anchor:middle}
+.chip{fill:#0f1622}
+.tag{font-family:-apple-system,"PingFang TC",sans-serif;fill:#f2c230;text-anchor:middle;letter-spacing:.02em}
+.ring{fill:none;stroke:#f2c230}
+</style>
+
+<!-- 主線 -->
+<path class="lnA" d="M8,210 H284" />
+<path class="lnA" d="M444,210 H711" />
+<!-- 分支:BigQuery ML 兩個模型節點 -->
+<path class="lnA" d="M284,210 L310,100" />
+<path class="lnA" d="M418,100 L444,210" />
+<path class="lnA" d="M284,210 L310,312" />
+<path class="lnA" d="M418,312 L444,210" />
+<circle class="dot" cx="284" cy="210" r="3.5" />
+<circle class="dot" cx="444" cy="210" r="3.5" />
+
+<!-- 箭頭(底下墊一片深色圓,不然琥珀色字疊在同色主線上會隱形) -->
+<circle class="chip" cx="95" cy="210" r="9" />
+<circle class="chip" cx="183" cy="210" r="9" />
+<circle class="chip" cx="451" cy="210" r="9" />
+<circle class="chip" cx="540" cy="210" r="9" />
+<circle class="chip" cx="629" cy="210" r="9" />
+<text class="arrow" x="95" y="215" font-size="15">►</text>
+<text class="arrow" x="183" y="215" font-size="15">►</text>
+<text class="arrow" x="451" y="215" font-size="15">►</text>
+<text class="arrow" x="540" y="215" font-size="15">►</text>
+<text class="arrow" x="629" y="215" font-size="15">►</text>
+
+<!-- 節點:訂單事件 -->
+<rect class="node" x="8" y="190" width="80" height="40" rx="8" />
+<text class="zh" x="48" y="215" font-size="14">訂單事件</text>
+
+<!-- 節點:Cloud Pub/Sub -->
+<rect class="node" x="102" y="190" width="74" height="40" rx="8" />
+<text class="mono" x="139" y="206" font-size="11">Cloud</text>
+<text class="mono" x="139" y="220" font-size="11">Pub/Sub</text>
+
+<!-- 節點:BigQuery -->
+<rect class="node" x="190" y="190" width="80" height="40" rx="8" />
+<text class="mono" x="230" y="215" font-size="13">BigQuery</text>
+
+<!-- 節點:Top Sale 熱銷(BigQuery ML) -->
+<rect class="node" x="310" y="80" width="108" height="40" rx="8" />
+<text class="mono" x="364" y="96" font-size="11">Top Sale</text>
+<text class="zh" x="364" y="112" font-size="12">熱銷</text>
+
+<!-- 節點:I2I 隱式矩陣分解(BigQuery ML) -->
+<rect class="node" x="310" y="290" width="108" height="44" rx="8" />
+<text class="mono" x="364" y="308" font-size="11">I2I</text>
+<text class="zh" x="364" y="324" font-size="11">隱式矩陣分解</text>
+
+<!-- 節點:Redis -->
+<rect class="node" x="458" y="190" width="75" height="40" rx="8" />
+<text class="mono" x="495" y="206" font-size="12">Redis</text>
+<text class="zh" x="495" y="222" font-size="11">結果快取</text>
+
+<!-- 節點:推薦 API(Node.js)· API 邊界 = 轉乘站樣式(雙圈圓點) -->
+<circle class="ring" cx="584" cy="176" r="7" stroke-width="1.5" />
+<circle class="dot" cx="584" cy="176" r="2.8" />
+<rect class="node" x="547" y="190" width="75" height="40" rx="8" />
+<text class="zh" x="584" y="206" font-size="12">推薦 API</text>
+<text class="mono" x="584" y="221" font-size="10.5">Node.js</text>
+
+<!-- 節點:前台商品頁 -->
+<rect class="node" x="636" y="190" width="75" height="40" rx="8" />
+<text class="zh" x="673" y="206" font-size="12.5">商品頁</text>
+<text class="zh" x="673" y="221" font-size="10.5">你可能會喜歡</text>
+
+<!-- 三種策略標籤(Redis → API 段) -->
+<text class="tag" x="584" y="366" font-size="12">熱銷 · 相似商品 I2I · 即時推薦</text>
+</svg>

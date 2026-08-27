@@ -84,6 +84,15 @@ describe("STATIONS", () => {
     }
   });
 
+  it("三個專案站都有架構圖,alt 是描述而不是檔名", () => {
+    const projects = STATIONS.filter((s) => s.panel.kind === "project");
+    for (const s of projects) {
+      expect(s.panel.diagram?.src, s.id).toMatch(/^\/diagrams\/.+\.svg$/);
+      expect(s.panel.diagram!.alt.zh.length, s.id).toBeGreaterThan(10);
+      expect(s.panel.diagram!.alt.en.length, s.id).toBeGreaterThan(10);
+    }
+  });
+
   it("never exposes phone or address", () => {
     const blob = JSON.stringify(STATIONS);
     expect(blob).not.toMatch(/0900|四維路|五股/);
