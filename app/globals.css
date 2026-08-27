@@ -246,7 +246,7 @@ a { color: var(--green); }
   background: linear-gradient(90deg, transparent, rgba(160, 190, 230, .10) 35%, rgba(220, 235, 255, .16) 50%, rgba(160, 190, 230, .10) 65%, transparent);
   transform: translateX(-20vw);
   animation: gate-pass 10s linear infinite; }
-@keyframes gate-pass { 0% { transform: translateX(-20vw); } 12% { transform: translateX(120vw); } 100% { transform: translateX(120vw); } }
+@keyframes gate-pass { 0% { transform: translateX(-30vw); } 12% { transform: translateX(120vw); } 100% { transform: translateX(120vw); } }
 @media (max-aspect-ratio: 4/5) { .gate-pass { width: 30vw; } } /* 直式手機 18vw 太細讀不到 */
 @media (prefers-reduced-motion: reduce) { .gate-lamp, .gate-pass { animation: none; } }
 
@@ -318,16 +318,16 @@ a { color: var(--green); }
 
 /* ── 車票履歷:台鐵名片式車票。虛線裁切邊與紋理全 CSS,不引資產 ── */
 .ticket { display: block; width: min(420px, 100%); margin-top: 18px; padding: 14px 18px 12px;
-  color: var(--text); text-decoration: none; border: 1px solid rgba(159, 176, 200, .35);
+  color: var(--text); text-decoration: none; border: 1px solid rgba(139, 152, 173, .35);
   border-radius: 6px; background:
     repeating-linear-gradient(0deg, rgba(255, 255, 255, .015) 0 2px, transparent 2px 4px),
     rgba(20, 27, 38, .92);
   transition: border-color .2s, box-shadow .2s, transform .2s; }
-.ticket:hover { border-color: var(--amber); box-shadow: 0 0 16px rgba(255, 176, 46, .18); transform: rotate(0.4deg); }
+.ticket:hover { border-color: var(--amber); box-shadow: 0 0 16px rgba(242, 194, 48, .18); transform: rotate(0.4deg); }
 .ticket:focus-visible { outline: 2px solid var(--green); outline-offset: 3px; }
 .ticket-head { display: flex; justify-content: space-between; font-family: var(--font-led);
   font-size: 11px; letter-spacing: .18em; color: var(--muted);
-  border-bottom: 1px dashed rgba(159, 176, 200, .3); padding-bottom: 8px; }
+  border-bottom: 1px dashed rgba(139, 152, 173, .3); padding-bottom: 8px; }
 .ticket-route { display: flex; align-items: baseline; gap: 14px; font-size: 22px; padding: 12px 0 10px; }
 .ticket-arrow { color: var(--amber); font-family: var(--font-led); font-size: 14px; }
 .ticket-meta { display: flex; justify-content: space-between; font-family: var(--font-led);
@@ -412,7 +412,7 @@ a { color: var(--green); }
   /* 截圖在窄螢幕吃滿卡寬,但不准吃掉整個 modal 的高度 */
   .detail-shot { max-height: 40vh; object-fit: contain; margin-bottom: 14px; }
 
-  /* 時刻表摺成卡列:每站兩行(上:序 + 站名 + 年份;下:停靠內容),月台欄隱藏。
+  /* 時刻表摺成卡列:每站兩行(上:序 + 站名 + 狀態;下:停靠內容),月台/年份欄隱藏。
      表頭改成只給螢幕閱讀器 —— 卡列的欄位順序自己會講話,再印一排標題只是雜訊。 */
   .concourse-hero .h1-sign { letter-spacing: .2em; } /* 76px→40px 之後字距要收,不然會撐破窄螢幕 */
   .timetable thead { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); }
