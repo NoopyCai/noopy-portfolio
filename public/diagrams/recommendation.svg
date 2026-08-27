@@ -1,5 +1,6 @@
 <svg viewBox="0 0 720 405" xmlns="http://www.w3.org/2000/svg">
-<!-- 電商推薦系統:路線圖視覺語言,節點=服務、線=資料流。手寫 SVG,無外部工具匯出。 -->
+<!-- 電商推薦系統:路線圖視覺語言,節點=服務、線=資料流。手寫 SVG,無外部工具匯出。
+     字級全數 >=13(規格底線),七個節點放不下一整排就改用兩排 Z 字轉折,不縮字。 -->
 <style>
 .lnA{stroke:#f2c230;stroke-width:4;fill:none;stroke-linecap:round}
 .dot{fill:#f2c230}
@@ -12,69 +13,63 @@
 .ring{fill:none;stroke:#f2c230}
 </style>
 
-<!-- 主線 -->
-<path class="lnA" d="M8,210 H284" />
-<path class="lnA" d="M444,210 H711" />
-<!-- 分支:BigQuery ML 兩個模型節點 -->
-<path class="lnA" d="M284,210 L310,100" />
-<path class="lnA" d="M418,100 L444,210" />
-<path class="lnA" d="M284,210 L310,312" />
-<path class="lnA" d="M418,312 L444,210" />
-<circle class="dot" cx="284" cy="210" r="3.5" />
-<circle class="dot" cx="444" cy="210" r="3.5" />
+<!-- 上排:訂單事件 → Cloud Pub/Sub → BigQuery -->
+<path class="lnA" d="M84,90 H100" />
+<path class="lnA" d="M230,90 H246" />
+<circle class="chip" cx="92" cy="90" r="9" />
+<circle class="chip" cx="238" cy="90" r="9" />
+<text class="arrow" x="92" y="95" font-size="16">►</text>
+<text class="arrow" x="238" y="95" font-size="16">►</text>
 
-<!-- 箭頭(底下墊一片深色圓,不然琥珀色字疊在同色主線上會隱形) -->
-<circle class="chip" cx="95" cy="210" r="9" />
-<circle class="chip" cx="183" cy="210" r="9" />
-<circle class="chip" cx="451" cy="210" r="9" />
-<circle class="chip" cx="540" cy="210" r="9" />
-<circle class="chip" cx="629" cy="210" r="9" />
-<text class="arrow" x="95" y="215" font-size="15">►</text>
-<text class="arrow" x="183" y="215" font-size="15">►</text>
-<text class="arrow" x="451" y="215" font-size="15">►</text>
-<text class="arrow" x="540" y="215" font-size="15">►</text>
-<text class="arrow" x="629" y="215" font-size="15">►</text>
+<rect class="node" x="8" y="70" width="76" height="40" rx="8" />
+<text class="zh" x="46" y="95" font-size="14">訂單事件</text>
 
-<!-- 節點:訂單事件 -->
-<rect class="node" x="8" y="190" width="80" height="40" rx="8" />
-<text class="zh" x="48" y="215" font-size="14">訂單事件</text>
+<rect class="node" x="100" y="70" width="130" height="40" rx="8" />
+<text class="mono" x="165" y="95" font-size="14">Cloud Pub/Sub</text>
 
-<!-- 節點:Cloud Pub/Sub -->
-<rect class="node" x="102" y="190" width="74" height="40" rx="8" />
-<text class="mono" x="139" y="206" font-size="11">Cloud</text>
-<text class="mono" x="139" y="220" font-size="11">Pub/Sub</text>
+<rect class="node" x="246" y="70" width="90" height="40" rx="8" />
+<text class="mono" x="291" y="95" font-size="14">BigQuery</text>
 
-<!-- 節點:BigQuery -->
-<rect class="node" x="190" y="190" width="80" height="40" rx="8" />
-<text class="mono" x="230" y="215" font-size="13">BigQuery</text>
+<!-- 分支:BigQuery ML 兩個模型節點(轉折到中段) -->
+<path class="lnA" d="M291,110 L290,180" />
+<path class="lnA" d="M291,110 L444,180" />
+<circle class="dot" cx="291" cy="110" r="3.5" />
 
-<!-- 節點:Top Sale 熱銷(BigQuery ML) -->
-<rect class="node" x="310" y="80" width="108" height="40" rx="8" />
-<text class="mono" x="364" y="96" font-size="11">Top Sale</text>
-<text class="zh" x="364" y="112" font-size="12">熱銷</text>
+<rect class="node" x="230" y="180" width="120" height="40" rx="8" />
+<text class="zh" x="290" y="205" font-size="14">Top Sale 熱銷</text>
 
-<!-- 節點:I2I 隱式矩陣分解(BigQuery ML) -->
-<rect class="node" x="310" y="290" width="108" height="44" rx="8" />
-<text class="mono" x="364" y="308" font-size="11">I2I</text>
-<text class="zh" x="364" y="324" font-size="11">隱式矩陣分解</text>
+<rect class="node" x="390" y="180" width="108" height="40" rx="8" />
+<text class="zh" x="444" y="205" font-size="14">I2I 矩陣分解</text>
 
-<!-- 節點:Redis -->
-<rect class="node" x="458" y="190" width="75" height="40" rx="8" />
-<text class="mono" x="495" y="206" font-size="12">Redis</text>
-<text class="zh" x="495" y="222" font-size="11">結果快取</text>
+<!-- 匯流,轉折到下排 -->
+<path class="lnA" d="M290,220 L366,270" />
+<path class="lnA" d="M444,220 L366,270" />
+<path class="lnA" d="M366,270 V290" />
+<circle class="dot" cx="366" cy="270" r="3.5" />
+
+<!-- 下排:Redis → 推薦 API → 商品頁 -->
+<rect class="node" x="305" y="290" width="122" height="40" rx="8" />
+<text class="mono" x="366" y="315" font-size="14">Redis 結果快取</text>
+
+<path class="lnA" d="M427,310 H443" />
+<circle class="chip" cx="435" cy="310" r="9" />
+<text class="arrow" x="435" y="315" font-size="16">►</text>
 
 <!-- 節點:推薦 API(Node.js)· API 邊界 = 轉乘站樣式(雙圈圓點) -->
-<circle class="ring" cx="584" cy="176" r="7" stroke-width="1.5" />
-<circle class="dot" cx="584" cy="176" r="2.8" />
-<rect class="node" x="547" y="190" width="75" height="40" rx="8" />
-<text class="zh" x="584" y="206" font-size="12">推薦 API</text>
-<text class="mono" x="584" y="221" font-size="10.5">Node.js</text>
+<circle class="ring" cx="483" cy="273" r="7" stroke-width="1.5" />
+<circle class="dot" cx="483" cy="273" r="2.8" />
+<rect class="node" x="443" y="287" width="80" height="46" rx="8" />
+<text class="zh" x="483" y="306" font-size="13">推薦 API</text>
+<text class="mono" x="483" y="322" font-size="13">Node.js</text>
 
-<!-- 節點:前台商品頁 -->
-<rect class="node" x="636" y="190" width="75" height="40" rx="8" />
-<text class="zh" x="673" y="206" font-size="12.5">商品頁</text>
-<text class="zh" x="673" y="221" font-size="10.5">你可能會喜歡</text>
+<path class="lnA" d="M523,310 H539" />
+<circle class="chip" cx="531" cy="310" r="9" />
+<text class="arrow" x="531" y="315" font-size="16">►</text>
+
+<rect class="node" x="539" y="287" width="104" height="46" rx="8" />
+<text class="zh" x="591" y="306" font-size="13">商品頁</text>
+<text class="zh" x="591" y="322" font-size="13">你可能會喜歡</text>
 
 <!-- 三種策略標籤(Redis → API 段) -->
-<text class="tag" x="584" y="366" font-size="12">熱銷 · 相似商品 I2I · 即時推薦</text>
+<text class="tag" x="483" y="365" font-size="13">熱銷 · 相似商品 I2I · 即時推薦</text>
 </svg>
