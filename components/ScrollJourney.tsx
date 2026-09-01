@@ -12,7 +12,6 @@ import { CabinComposite } from "./CabinComposite";
 import { CabinFrame } from "./CabinFrame";
 import { Door3D, type DoorApply, type DoorFrame } from "./Door3D";
 import { StationPanel } from "./StationPanel";
-import { GlassFilter } from "./ui/liquid-glass";
 import { RouteMap } from "./RouteMap";
 import { startSoundtrack } from "./SoundToggle";
 import { useLang } from "./LangProvider";
@@ -470,10 +469,6 @@ export function ScrollJourney() {
         className="stage"
         style={{ position: "relative", height: "100vh", width: "100%", overflow: "hidden", display: "grid", placeItems: "center", background: "var(--bg)", perspective: "1200px", perspectiveOrigin: "center" }}
       >
-        {/* 液態玻璃的 SVG 濾鏡定義:資訊卡的折射層引用 #glass-distortion。
-            必須常駐(不能掛在會隨 panelVisible 卸載的節點),否則卡片顯示中
-            濾鏡消失會整層黑掉 */}
-        <GlassFilter />
         {d.phase === "gate" && (
           <>
             {/* 月台等車的氛圍:頂棚燈微顫 + 對向列車每 ~10s 掠過一道亮帶。

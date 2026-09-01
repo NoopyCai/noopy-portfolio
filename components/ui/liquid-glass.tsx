@@ -11,9 +11,9 @@ import React from "react";
 // · 文字色(text-black)與字重(font-semibold)刻意不帶:黑字壓在 25% 白玻璃 + 夜景
 //   上不可讀,卡片內容維持站內字體系統。cursor 只在有 href 時才是 pointer(原元件
 //   恆為 pointer,非互動卡片不該誤導)。
-// · Chrome:backdrop-filter + filter: url(#glass-distortion) = 正統液態折射;
-//   Safari 的 SVG 濾鏡吃不到 backdrop(層本身是透明像素),自動退回 blur ——
-//   與 globals.css 舊 .glasscard 註解描述的瀏覽器差異一致。
+// · 原元件的 #glass-distortion 折射(feTurbulence + feDisplacementMap)在驗收時
+//   被使用者移除(背景不要扭曲感),blur 保留 —— 要復原就把 filter: url(#glass-distortion)
+//   加回層 0,並在 ScrollJourney 的 stage 重新掛 GlassFilter(git 歷史 4fece5b 有完整版)。
 // · 層的 class(lg-*)是 globals.css 無障礙降級的掛鉤:inline style 只有 !important
 //   蓋得過,詳見該處註解。
 
@@ -51,7 +51,8 @@ export const GlassEffect: React.FC<GlassEffectProps> = ({
 
   const content = (
     <div className={className ? `glass-fx ${className}` : "glass-fx"} style={glassStyle}>
-      {/* 層 0:折射(Chrome)/ blur(Safari) */}
+      {/* 層 0:背景模糊。原元件另有 filter: url(#glass-distortion) 的折射,
+          使用者驗收決定拿掉(背景不要扭曲感),blur 保留 */}
       <div
         className="lg-distort"
         style={{
@@ -62,7 +63,6 @@ export const GlassEffect: React.FC<GlassEffectProps> = ({
           borderRadius: R,
           backdropFilter: "blur(3px)",
           WebkitBackdropFilter: "blur(3px)",
-          filter: "url(#glass-distortion)",
           isolation: "isolate",
         }}
       />
@@ -98,30 +98,3 @@ export const GlassEffect: React.FC<GlassEffectProps> = ({
   );
 };
 
-// SVG 濾鏡:參數逐字照抄原元件。display:none 的 SVG 只是濾鏡定義的宿主,
-// 必須常駐 DOM(掛在 ScrollJourney 的 stage 裡),被引用的層才折射得到。
-export const GlassFilter: React.FC = () => (
-  <svg style={{ display: "none" }} aria-hidden>
-    <filter id="glass-distortion" x="0%" y="0%" width="100%" height="100%" filterUnits="objectBoundingBox">
-      <feTurbulence type="fractalNoise" baseFrequency="0.001 0.005" numOctaves="1" seed="17" result="turbulence" />
-      <feComponentTransfer in="turbulence" result="mapped">
-        <feFuncR type="gamma" amplitude="1" exponent="10" offset="0.5" />
-        <feFuncG type="gamma" amplitude="0" exponent="1" offset="0" />
-        <feFuncB type="gamma" amplitude="0" exponent="1" offset="0.5" />
-      </feComponentTransfer>
-      <feGaussianBlur in="turbulence" stdDeviation="3" result="softMap" />
-      <feSpecularLighting
-        in="softMap"
-        surfaceScale="5"
-        specularConstant="1"
-        specularExponent="100"
-        lightingColor="white"
-        result="specLight"
-      >
-        <fePointLight x="-200" y="-200" z="300" />
-      </feSpecularLighting>
-      <feComposite in="specLight" operator="arithmetic" k1="0" k2="1" k3="1" k4="0" result="litImage" />
-      <feDisplacementMap in="SourceGraphic" in2="softMap" scale="200" xChannelSelector="R" yChannelSelector="G" />
-    </filter>
-  </svg>
-);

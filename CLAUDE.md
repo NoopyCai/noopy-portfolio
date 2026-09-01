@@ -45,8 +45,8 @@ components/
   Window.tsx            ⚠ 同上(降級路徑):單扇車窗的 crossfade + 水平流動(canvas blit)
   StationPanel.tsx      作品資訊卡(liquid glass)+「看細節」modal;定位/淡入在外層
                         .station-panel,玻璃本體是 GlassEffect(坑 5:兩者不能同一元素)
-  ui/liquid-glass.tsx   GlassEffect + #glass-distortion 濾鏡(使用者提供元件的 1:1 移植;
-                        Chrome 有液態折射、Safari 退回 blur;濾鏡 SVG 常駐在 stage 裡)
+  ui/liquid-glass.tsx   GlassEffect(使用者提供元件的移植:白玻璃 + blur + 雙鏡面內光;
+                        原版的 #glass-distortion 折射經驗收移除,復原方式見檔頭註解)
   RouteMap.tsx          右側六站進度點,點擊跳站
   Concourse.tsx         出站大廳。`overlap` = 有旅程時它**自己就是 exit 尾段的簾幕**
                         (上拉一個視口疊在 stage 上,見下方「出站入景」)
