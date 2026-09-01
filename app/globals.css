@@ -131,7 +131,24 @@ a { color: var(--green); }
    使用者提供元件的 1:1 移植(Chrome 有 #glass-distortion 折射、Safari 退回 blur)。
    這裡只剩排版 padding 與無障礙降級;舊的 CSS 玻璃(深色底 + specular rim ::before)
    已由元件層疊取代。 */
-.glasscard { padding: 18px 22px 20px; text-shadow: 0 1px 5px rgba(0, 0, 0, 0.4); }
+.glasscard { padding: 18px 22px 20px; }
+/* 白玻璃上的墨色系:元件底是 25% 白玻璃(亮),夜間淺色字在上面對比不足(使用者
+   驗收回報看不清)。卡內整組改深色墨水;琥珀/綠的**色相保留、亮度降到墨色**,
+   LED 語言不斷裂。只作用在 .glasscard 內 —— 卡片外(跑馬燈/路線圖/大廳)仍是
+   夜色淺字。舊的深色 text-shadow 一併移除(深字配深暈是髒的)。 */
+.glasscard { color: #0e1318; }
+.glasscard .sp-station { color: #8a5f00; }
+.glasscard .sp-meta, .glasscard .sp-sub, .glasscard .sp-metric-l { color: #3c4754; }
+.glasscard .impact { color: #7a5500; text-shadow: none; }
+.glasscard .sp-body { color: #1c2530; }
+.glasscard .sp-tag { color: #0b6b2a; border-color: rgba(11, 107, 42, .45); }
+.glasscard .sp-metric-n { color: #7a5500; }
+.glasscard .sp-skills b { color: #2f6e1a; }
+.glasscard .detail-btn { color: #0b6b2a; border-color: rgba(11, 107, 42, .5); background: rgba(11, 107, 42, .08); }
+.glasscard .detail-btn:hover { background: rgba(11, 107, 42, .15); box-shadow: 0 0 10px rgba(11, 107, 42, .25); }
+.glasscard .sp-link-cta { color: #0b6b2a; }
+/* 手機的抬頭細線/數據列分隔線:var(--line) 是給夜色底的白線,在白玻璃上幾乎看不見 */
+.glasscard .sp-head, .glasscard .sp-metrics { border-color: rgba(10, 15, 20, .18); }
 /* HIG 無障礙 / 後備:元件的玻璃層是 inline style,只有 !important 蓋得過 ——
    這兩條是可及性要求(不支援 backdrop-filter / 使用者要求降低透明度 → 實色深底
    保對比),不是風格覆寫。 */
