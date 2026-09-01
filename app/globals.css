@@ -126,47 +126,21 @@ a { color: var(--green); }
 .wirecar .sign { fill: none; stroke: var(--green); stroke-width: 1.5; }
 .wirecar .winfill { fill: var(--green); opacity: .85; transform-box: fill-box; transform-origin: left center; }
 
-/* Liquid Glass 資訊面板(左下作品資訊)
-   參考 Apple HIG「Materials」+ Liquid Glass(WWDC25):清透半透明 + vibrancy(飽和提升)
-   + 鏡面高光邊 specular rim + 深度層次 + squircle。註:正統的 SVG feDisplacementMap 折射
-   僅 Chrome 支援 backdrop-filter:url(),Safari/iOS 無效,故以跨瀏覽器 CSS 忠實還原視覺特徵。 */
-.glasscard {
-  padding: 18px 22px 20px;
-  border-radius: 26px; /* squircle 感 */
-  background: rgba(16, 22, 26, 0.32);
-  backdrop-filter: blur(16px) saturate(180%) brightness(1.04);
-  -webkit-backdrop-filter: blur(16px) saturate(180%) brightness(1.04);
-  box-shadow:
-    0 10px 34px rgba(0, 0, 0, 0.36), /* 懸浮外陰影 */
-    inset 0 1px 1px rgba(255, 255, 255, 0.26), /* 頂緣內高光 */
-    inset 0 -1px 1px rgba(0, 0, 0, 0.18); /* 底緣內陰影(厚度感) */
-  text-shadow: 0 1px 5px rgba(0, 0, 0, 0.4);
-}
-/* 鏡面高光邊 specular rim:1px 漸層描邊,光從左上包覆、右下回光(Liquid Glass 招牌邊光) */
-.glasscard::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  padding: 1px;
-  background: linear-gradient(135deg,
-    rgba(255, 255, 255, 0.75) 0%,
-    rgba(255, 255, 255, 0.14) 24%,
-    rgba(255, 255, 255, 0.02) 50%,
-    rgba(255, 255, 255, 0.08) 74%,
-    rgba(255, 255, 255, 0.5) 100%);
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  mask-composite: exclude;
-  pointer-events: none;
-}
-/* HIG 無障礙 / 後備:不支援 backdrop-filter 或使用者要求降低透明度 → 實色底保對比 */
+/* Liquid Glass 資訊卡:玻璃本體(折射/白玻璃提亮/雙鏡面內光)由
+   components/ui/liquid-glass.tsx 的 GlassEffect 以 inline style 渲染 ——
+   使用者提供元件的 1:1 移植(Chrome 有 #glass-distortion 折射、Safari 退回 blur)。
+   這裡只剩排版 padding 與無障礙降級;舊的 CSS 玻璃(深色底 + specular rim ::before)
+   已由元件層疊取代。 */
+.glasscard { padding: 18px 22px 20px; text-shadow: 0 1px 5px rgba(0, 0, 0, 0.4); }
+/* HIG 無障礙 / 後備:元件的玻璃層是 inline style,只有 !important 蓋得過 ——
+   這兩條是可及性要求(不支援 backdrop-filter / 使用者要求降低透明度 → 實色深底
+   保對比),不是風格覆寫。 */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .glasscard { background: rgba(16, 22, 26, 0.9); }
+  .glasscard .lg-veil { background: rgba(16, 22, 26, 0.9) !important; }
 }
 @media (prefers-reduced-transparency: reduce) {
-  .glasscard { background: rgba(16, 22, 26, 0.92); backdrop-filter: none; -webkit-backdrop-filter: none; }
+  .glasscard .lg-veil { background: rgba(16, 22, 26, 0.92) !important; }
+  .glasscard .lg-distort { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; filter: none !important; }
 }
 
 /* 路線圖跳站導覽(右側) */
@@ -377,10 +351,11 @@ a { color: var(--green); }
     max-height: 84vh; overflow-y: auto; /* 極長內容的保險 */
     overscroll-behavior: contain; /* 卡片捲到底不要順帶把整列車拉走(iOS scroll chaining) */
     -webkit-overflow-scrolling: touch;
-    padding: 19px 18px 21px; border-radius: 22px;
     text-align: left; /* 段落靠左才讀得動(置中的內文兩邊都是鋸齒) */
-    background: rgba(10, 16, 20, .66); /* 直式時卡片壓在亮窗景上,底要更實才有對比 */
   }
+  /* 卡片視覺(padding/圓角/底)在 GlassEffect 的殼上:外層只管定位與捲動。
+     舊的實色深底 rgba(10,16,20,.66) 已由元件的白玻璃取代(使用者指定視覺)。 */
+  .glasscard { padding: 19px 18px 21px; }
   /* 站名列 = 看板抬頭:細線收邊,和內容分層 */
   .sp-head { gap: 8px; padding-bottom: 9px; border-bottom: 1px solid var(--line); }
   .sp-station { font-size: 11px; letter-spacing: .16em; }
@@ -431,7 +406,8 @@ a { color: var(--green); }
 
 /* 橫式手機(矮螢幕):面板縮小、避免蓋住車窗過多 */
 @media (max-height: 480px) and (orientation: landscape) {
-  .station-panel { bottom: 8px; left: 12px; max-width: 46%; padding: 10px 13px; }
+  .station-panel { bottom: 8px; left: 12px; max-width: 46%; }
+  .glasscard { padding: 10px 13px; } /* 矮螢幕縮 padding:padding 在玻璃殼上,不在定位層 */
   .station-panel .sp-body { display: none; } /* 矮螢幕省略長描述,保留標題/impact/標籤 */
   .routemap { gap: 0; }
 }

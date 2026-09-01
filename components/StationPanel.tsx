@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { useLang } from "./LangProvider";
 import { Icon } from "./Icon";
+import { GlassEffect } from "./ui/liquid-glass";
 import type { Station } from "@/content/stations";
 
 // 站點內容面板(ride 疊層):依 panel.kind 渲染雙語內容,visible 控制淡入。
@@ -23,8 +24,12 @@ export function StationPanel({ station, visible }: { station: Station; visible: 
   };
   return (
     <>
-      {/* 版面全部在 CSS(.sp-*):桌機浮出左下、手機改成靠左閱讀的資訊看板,見 globals.css */}
-      <div className="glasscard station-panel" style={style}>
+      {/* 版面全部在 CSS(.sp-*):桌機浮出左下、手機改成靠左閱讀的資訊看板,見 globals.css。
+          定位/淡入在外層 .station-panel,玻璃本體在 GlassEffect(液態玻璃元件的 1:1 移植)
+          —— 拆成兩層是因為淡入的 opacity/transform 是逐站直寫的 inline style(坑 5),
+          不能和元件自己的 transition 打架。 */}
+      <div className="station-panel" style={style}>
+        <GlassEffect className="glasscard">
         <div className="sp-head">
           <span className="sp-station">{t(station.name)}</span>
           {(p.year || p.role) && (
@@ -72,6 +77,7 @@ export function StationPanel({ station, visible }: { station: Station; visible: 
             <a key={l.href} href={l.href} target="_blank" rel="noopener" className="sp-link">{l.label} <Icon name="external" /></a>
           ))}
         </div>
+        </GlassEffect>
       </div>
 
       {open && p.detail && (

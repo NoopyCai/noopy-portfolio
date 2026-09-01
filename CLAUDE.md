@@ -25,7 +25,7 @@ kill $(lsof -ti:3000 -sTCP:LISTEN) && npm run build && rm -rf .next && npm run d
 
 ## 技術棧
 
-Next.js 15 App Router · React 19 · GSAP ScrollTrigger · lucide-react · three.js（**只有車門過場用，而且只能透過 `dynamic import()` 進來**，見下方「門過場」）· **純 CSS，沒有 UI framework 也不要加**。全部樣式集中在 `app/globals.css`（單檔，~250 行）。測試是 vitest + jsdom。
+Next.js 15 App Router · React 19 · GSAP ScrollTrigger · lucide-react · three.js（**只有車門過場用，而且只能透過 `dynamic import()` 進來**，見下方「門過場」）· **純 CSS，沒有 UI framework 也不要加**。全部樣式集中在 `app/globals.css`（單檔，~250 行）。唯一的例外：資訊卡的玻璃本體是 `components/ui/liquid-glass.tsx`（使用者提供的元件 1:1 移植，inline style 屬元件內部實作；原元件的 Tailwind 工具類已轉譯成等值 inline style——**仍然沒有 Tailwind/框架**，preflight 會重置全站樣式，不要為它裝）。測試是 vitest + jsdom。
 
 ## 架構
 
@@ -43,7 +43,10 @@ components/
                         (文字永不進 WebGL;A6 反光要跟滑鼠走,留在 CSS 才是零重繪)
   CabinComposite.tsx    ⚠ **no-WebGL 的降級路徑**:車廂照 + 三扇車窗 + LED + grade + 立柱層
   Window.tsx            ⚠ 同上(降級路徑):單扇車窗的 crossfade + 水平流動(canvas blit)
-  StationPanel.tsx      作品資訊卡(liquid glass)+「看細節」modal
+  StationPanel.tsx      作品資訊卡(liquid glass)+「看細節」modal;定位/淡入在外層
+                        .station-panel,玻璃本體是 GlassEffect(坑 5:兩者不能同一元素)
+  ui/liquid-glass.tsx   GlassEffect + #glass-distortion 濾鏡(使用者提供元件的 1:1 移植;
+                        Chrome 有液態折射、Safari 退回 blur;濾鏡 SVG 常駐在 stage 裡)
   RouteMap.tsx          右側六站進度點,點擊跳站
   Concourse.tsx         出站大廳。`overlap` = 有旅程時它**自己就是 exit 尾段的簾幕**
                         (上拉一個視口疊在 stage 上,見下方「出站入景」)
@@ -223,7 +226,7 @@ L1 的立柱層知識**只剩降級路徑在用**,但數字仍然是唯一來源
 完整清單見 `docs/design-audit-2026-07.md`（約 60 項，排序過）。最高優先的四項：
 
 1. ~~**六站燈光曲線**（§3.1 + §3.2）~~ — **已修**：曲線重排成「傍晚出發、天亮到站」（`taipei` 1.5 的正午 → 0.86 的夜間台北 101 點燈、`field` golden hour → 凌晨 blue hour），`Grade` 改數值型別逐幀連續插值、六站 blend 統一 `soft-light`。曲線與規則見 DESIGN.md §1
-2. **亮站對比**（§1.2）— 已大幅緩解但未全解：28 個量測點中 < 3:1 的從 12 個降到 5 個（`taipei` 站從「7 項全掛」變成 4 項過 AA）。**剩下的不是 grade 的問題**，是資訊卡壓在 `cabin.jpg` 的淺藍座椅上：`--muted` 在 `city` 1.80:1、`--amber` 在 `sea` 2.06:1。要做 scrim 才會過
+2. **亮站對比**（§1.2）— 已大幅緩解但未全解：28 個量測點中 < 3:1 的從 12 個降到 5 個（`taipei` 站從「7 項全掛」變成 4 項過 AA）。**剩下的不是 grade 的問題**，是資訊卡壓在 `cabin.jpg` 的淺藍座椅上：`--muted` 在 `city` 1.80:1、`--amber` 在 `sea` 2.06:1。要做 scrim 才會過。⚠️ 2026-09 資訊卡改為 25% 白玻璃（使用者指定視覺、明知踩對比紅線），上述數字全部失效，需整批重量
 3. **SSR HTML 沒有 `<h1>`**，四個作品站的內容爬蟲完全看不到（§1.3）
 4. **三個專案零個可驗證連結** — `links` 的型別/CSS/渲染邏輯全寫好了但沒資料（§7.3）
 
